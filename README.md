@@ -39,3 +39,52 @@ You will need the following installed on your system:
    ```bash
    git clone [https://github.com/](https://github.com/)<YOUR_GITHUB_USERNAME>/CeyBus.git
    cd CeyBus
+
+2. **Install Dependencies:**
+   ```bash
+   npm install
+
+3. **Set up environment variables:**
+Create a .env file in the root directory with your setup details:
+```bash
+PORT=3000
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=your_password
+DB_NAME=ceybus_db
+```
+4. **Database Configuration:**
+Import your database schema into MySQL to initialize the necessary tables for routes, stops, and schedules.
+
+5. **Start the application:**
+```bash
+# Development mode
+npm run dev
+
+# Production mode
+npm start
+```
+6. **View the application:**
+Open your browser and navigate to
+```bash
+http://localhost:3000
+```
+
+**Repository Structure**
+```bash
+CeyBus/
+├── public/
+│   ├── index.html       # Map interface and socket client script
+│   ├── css/             # Application styles
+│   └── js/              # Frontend logic
+├── src/
+│   ├── config/          # Database configuration
+│   ├── controllers/     # Controller handlers
+│   ├── routes/          # Express route definitions
+│   └── socket/          # Socket.io event handlers
+├── .gitignore
+├── package.json
+└── README.md
+```
+**License**
+Distributed under the MIT License.
