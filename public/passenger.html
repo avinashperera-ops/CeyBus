@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CeyBus — Passenger Live Tracking</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f6f6f7',
+                            100: '#e0e0e0',
+                            900: '#0f0f11',
+                            dark: '#121214'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Leaflet CSS & JS for Interactive Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Socket.IO Client -->
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #fcfcfc;
+            color: #0f0f11;
+            -webkit-tap-highlight-color: transparent;
+        }
+        #map {
+            height: 100%;
+            width: 100%;
+            z-index: 10;
+        }
+        .leaflet-container {
+            font-family: 'Inter', sans-serif !important;
+        }
+        /* Custom Bus Marker Animation */
+        .bus-marker-pulse {
+            border-radius: 50%;
+            box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+            animation: pulse-green 2s infinite;
+        }
+        @keyframes pulse-green {
+            0% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+            }
+            70% {
+                transform: scale(1);
+                box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
+            }
+            100% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+            }
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col antialiased selection:bg-black selection:text-white overflow-hidden">
+
+    <!-- Top Navigation Header -->
+    <header class="w-full bg-white border-b border-neutral-200/80 px-4 sm:px-6 py-3.5 flex items-center justify-between shrink-0 z-30 shadow-sm">
+        <a href="/" class="flex items-center gap-2.5 group">
+            <div class="w-8 h-8 bg-black text-white font-black text-xs flex items-center justify-center rounded-lg shadow-sm group-hover:scale-105 transition-transform">
+                CB
+            </div>
+            <span class="text-lg font-bold tracking-tight text-neutral-900">CeyBus</span>
+            <span class="hidden sm:inline-block ml-2 px-2.5 py-0.5 rounded-full bg-neutral-100 text-[10px] font-semibold text-neutral-600 uppercase tracking-wider">Passenger Radar</span>
+        </a>
+
+        <div class="flex items-center gap-2">
+            <span class="hidden md:flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-semibold">
+                <span id="socketDot" class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span id="activeCountHeader">Connecting...</span>
+            </span>
+            <a href="/login.html" class="px-4 py-2 text-xs font-semibold text-neutral-700 hover:text-black transition-colors rounded-full hover:bg-neutral-100">
+                Account
+            </a>
+        </div>
+    </header>
+
+    <!-- Main Workspace Split Container -->
+    <div class="flex-1 flex flex-col md:flex-row relative overflow-hidden">
+        
+        <!-- Left Sidebar Filter & Live Route List -->
+        <aside class="w-full md:w-96 bg-white border-r border-neutral-200/80 flex flex-col shrink-0 z-20 max-h-[45vh] md:max-h-full shadow-md md:shadow-none">
+            
+            <!-- Search & Filter Controls -->
+            <div class="p-4 border-b border-neutral-100 bg-neutral-50/50">
+                <form id="searchFilterForm" class="space-y-2">
+                    <div class="relative">
+                        <input type="text" id="routeQueryInput" placeholder="Search route (e.g., 138, Pettah, Kandy)" class="w-full bg-white border border-neutral-200 rounded-xl px-3.5 py-2.5 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-black font-medium">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <select id="originSelectFilter" class="w-1/2 bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 text-[11px] text-neutral-700 font-medium focus:outline-none">
+                            <option value="">All Origins</option>
+                        </select>
+                        <select id="destinationSelectFilter" class="w-1/2 bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 text-[11px] text-neutral-700 font-medium focus:outline-none">
+                            <option value="">All Destinations</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Active Fleet List Feed -->
+            <div class="flex-1 overflow-y-auto p-4 space-y-3" id="activeBusesList">
+                <div class="text-center py-8 text-neutral-400 text-xs">
+                    <svg class="w-8 h-8 mx-auto mb-2 text-neutral-300 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Scanning national active buses...
+                </div>
+            </div>
+
+            <!-- Mobile Quick Status Bar -->
+            <div class="p-3 border-t border-neutral-100 text-center text-[11px] text-neutral-400 bg-neutral-50 md:hidden">
+                Tap a bus card above or marker on map to lock camera.
+            </div>
+        </aside>
+
+        <!-- Right Side Interactive Telemetry Map -->
+        <main class="flex-1 relative h-full bg-neutral-100">
+            <div id="map"></div>
+
+            <!-- Map Floating Information Panel -->
+            <div id="mapOverlayCard" class="hidden absolute bottom-6 left-1/2 -translate-x-1/2 sm:left-6 sm:translate-x-0 z-[1000] w-[90%] sm:w-80 bg-white rounded-2xl border border-neutral-200 p-4 shadow-xl">
+                <div class="flex items-center justify-between pb-3 border-b border-neutral-100">
+                    <div class="flex items-center gap-2.5">
+                        <span id="selectedRouteBadge" class="w-8 h-8 rounded-lg bg-black text-white text-xs font-bold flex items-center justify-center">--</span>
+                        <div>
+                            <h4 id="selectedRouteName" class="text-xs font-bold text-neutral-900">Select a bus</h4>
+                            <p id="selectedPlateNo" class="text-[10px] font-mono font-semibold text-neutral-500">--</p>
+                        </div>
+                    </div>
+                    <button id="closeOverlayBtn" class="text-neutral-400 hover:text-black text-xs p-1">✕</button>
+                </div>
+                <div class="pt-3 flex justify-between items-center text-xs">
+                    <div>
+                        <p class="text-[10px] text-neutral-400 uppercase font-semibold">Speed</p>
+                        <p id="selectedBusSpeed" class="font-bold text-neutral-900">0 km/h</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] text-neutral-400 uppercase font-semibold">Last Signal</p>
+                        <p id="selectedBusPing" class="font-bold text-emerald-600">Just Now</p>
+                    </div>
+                    <button id="focusBusBtn" class="px-3 py-1.5 bg-black text-white text-[11px] font-semibold rounded-lg hover:bg-neutral-800">
+                        Focus
+                    </button>
+                </div>
+            </div>
+        </main>
+
+    </div>
+
+    <!-- Live Telemetry Logic Script -->
+    <script>
+        const socket = io();
+
+        // Default Map View Center (Sri Lanka Centered / Colombo default)
+        const DEFAULT_LAT = 6.9271;
+        const DEFAULT_LNG = 79.8612;
+        let map;
+        let busMarkers = new Map();
+        let activeBusesData = new Map();
+        let selectedBusId = null;
+
+        // Initialize Interactive Map
+        function initMap() {
+            map = L.map('map', {
+                zoomControl: false
+            }).setView([DEFAULT_LAT, DEFAULT_LNG], 12);
+
+            // Add Zoom Control to Top Right
+            L.control.zoom({ position: 'topright' }).addTo(map);
+
+            // OpenStreetMap Tiles Layer
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap contributors | CeyBus Telemetry'
+            }).addTo(map);
+        }
+
+        initMap();
+
+        // Socket Event Listeners
+        socket.on('connect', () => {
+            document.getElementById('socketDot').className = 'w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse';
+            fetchLiveBuses();
+        });
+
+        socket.on('disconnect', () => {
+            document.getElementById('socketDot').className = 'w-1.5 h-1.5 rounded-full bg-rose-500';
+            document.getElementById('activeCountHeader').innerText = 'Offline';
+        });
+
+        socket.on('busCountUpdate', (data) => {
+            if (data && typeof data.count === 'number') {
+                document.getElementById('activeCountHeader').innerText = `${data.count} Buses Live`;
+            }
+        });
+
+        // Real-time Bus Telemetry Location Updates
+        socket.on('busLocationUpdated', (data) => {
+            if (data && data.plateNumber) {
+                activeBusesData.set(data.plateNumber, data);
+                updateOrAddMarker(data);
+                renderBusesList();
+                if (selectedBusId === data.plateNumber) {
+                    updateOverlay(data);
+                }
+            }
+        });
+
+        socket.on('busOffline', (data) => {
+            if (data && data.plateNumber) {
+                if (busMarkers.has(data.plateNumber)) {
+                    map.removeLayer(busMarkers.get(data.plateNumber));
+                    busMarkers.delete(data.plateNumber);
+                }
+                activeBusesData.delete(data.plateNumber);
+                renderBusesList();
+                if (selectedBusId === data.plateNumber) {
+                    document.getElementById('mapOverlayCard').classList.add('hidden');
+                    selectedBusId = null;
+                }
+            }
+        });
+
+        // Fetch Initial Fleet
+        async function fetchLiveBuses() {
+            try {
+                const res = await fetch('/api/buses/active');
+                if (res.ok) {
+                    const buses = await res.json();
+                    activeBusesData.clear();
+                    if (Array.isArray(buses)) {
+                        buses.forEach(b => {
+                            const id = b.plateNumber || b.id;
+                            if (id) {
+                                activeBusesData.set(id, b);
+                                updateOrAddMarker(b);
+                            }
+                        });
+                    }
+                    populateFilterDropdowns();
+                    renderBusesList();
+                    document.getElementById('activeCountHeader').innerText = `${activeBusesData.size} Buses Live`;
+                }
+            } catch (err) {
+                console.warn('Failed to fetch initial active fleet:', err);
+                renderBusesList();
+            }
+        }
+
+        // Add or Smoothly Move Marker on Map
+        function updateOrAddMarker(bus) {
+            const lat = bus.latitude || bus.lat;
+            const lng = bus.longitude || bus.lng;
+            const id = bus.plateNumber || bus.id;
+
+            if (!lat || !lng || !id) return;
+
+            const customIcon = L.divIcon({
+                className: 'custom-bus-icon',
+                html: `
+                    <div class="w-8 h-8 bg-black text-white rounded-full flex items-center justify-center font-bold text-[10px] border-2 border-white shadow-lg bus-marker-pulse">
+                        ${bus.routeNumber || 'CB'}
+                    </div>
+                `,
+                iconSize: [32, 32],
+                iconAnchor: [16, 16]
+            });
+
+            if (busMarkers.has(id)) {
+                const marker = busMarkers.get(id);
+                marker.setLatLng([lat, lng]);
+            } else {
+                const marker = L.marker([lat, lng], { icon: customIcon }).addTo(map);
+                marker.on('click', () => selectBus(id));
+                busMarkers.set(id, marker);
+            }
+        }
+
+        // Render Sidebar Bus Cards
+        function renderBusesList() {
+            const listEl = document.getElementById('activeBusesList');
+            const searchQ = document.getElementById('routeQueryInput').value.toLowerCase().trim();
+            const originFilter = document.getElementById('originSelectFilter').value;
+            const destFilter = document.getElementById('destinationSelectFilter').value;
+
+            const busesArray = Array.from(activeBusesData.values()).filter(bus => {
+                const routeNo = (bus.routeNumber || '').toLowerCase();
+                const origin = (bus.origin || bus.from || '').toLowerCase();
+                const dest = (bus.destination || bus.to || '').toLowerCase();
+                const plate = (bus.plateNumber || '').toLowerCase();
+
+                const matchesQuery = !searchQ || routeNo.includes(searchQ) || origin.includes(searchQ) || dest.includes(searchQ) || plate.includes(searchQ);
+                const matchesOrigin = !originFilter || bus.origin === originFilter;
+                const matchesDest = !destFilter || bus.destination === destFilter;
+
+                return matchesQuery && matchesOrigin && matchesDest;
+            });
+
+            if (busesArray.length === 0) {
+                listEl.innerHTML = `
+                    <div class="text-center py-10 text-neutral-400 text-xs">
+                        No active buses matched your filter.
+                    </div>
+                `;
+                return;
+            }
+
+            listEl.innerHTML = busesArray.map(bus => {
+                const id = bus.plateNumber || bus.id;
+                const routeNo = bus.routeNumber || '138';
+                const origin = bus.origin || 'Origin';
+                const dest = bus.destination || 'Destination';
+                const speed = bus.speed ? `${Math.round(bus.speed)} km/h` : 'Moving';
+                const isSelected = selectedBusId === id;
+
+                return `
+                    <div onclick="selectBus('${id}')" class="p-3.5 rounded-xl border ${isSelected ? 'border-black bg-neutral-900 text-white shadow-md' : 'border-neutral-200 bg-white text-neutral-900 hover:border-neutral-300'} cursor-pointer transition-all">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="flex items-center gap-2">
+                                <span class="px-2 py-0.5 rounded text-[11px] font-bold ${isSelected ? 'bg-white text-black' : 'bg-black text-white'}">${routeNo}</span>
+                                <span class="text-xs font-bold truncate max-w-[140px]">${origin} ⇄ ${dest}</span>
+                            </div>
+                            <span class="text-[10px] font-mono ${isSelected ? 'text-neutral-300' : 'text-neutral-500'} font-semibold">${id}</span>
+                        </div>
+                        <div class="flex items-center justify-between text-[11px] ${isSelected ? 'text-neutral-300' : 'text-neutral-500'}">
+                            <span>Status: Live</span>
+                            <span class="font-medium">${speed}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function populateFilterDropdowns() {
+            const origins = new Set();
+            const dests = new Set();
+
+            activeBusesData.forEach(b => {
+                if (b.origin) origins.add(b.origin);
+                if (b.destination) dests.add(b.destination);
+            });
+
+            const originSelect = document.getElementById('originSelectFilter');
+            const destSelect = document.getElementById('destinationSelectFilter');
+
+            originSelect.innerHTML = '<option value="">All Origins</option>' + Array.from(origins).map(o => `<option value="${o}">${o}</option>`).join('');
+            destSelect.innerHTML = '<option value="">All Destinations</option>' + Array.from(dests).map(d => `<option value="${d}">${d}</option>`).join('');
+        }
+
+        function selectBus(id) {
+            selectedBusId = id;
+            const bus = activeBusesData.get(id);
+            if (bus) {
+                const lat = bus.latitude || bus.lat;
+                const lng = bus.longitude || bus.lng;
+                if (lat && lng) {
+                    map.flyTo([lat, lng], 15, { animate: true, duration: 1.2 });
+                }
+                updateOverlay(bus);
+            }
+            renderBusesList();
+        }
+
+        function updateOverlay(bus) {
+            document.getElementById('mapOverlayCard').classList.remove('hidden');
+            document.getElementById('selectedRouteBadge').innerText = bus.routeNumber || 'CB';
+            document.getElementById('selectedRouteName').innerText = `${bus.origin || 'Origin'} ⇄ ${bus.destination || 'Destination'}`;
+            document.getElementById('selectedPlateNo').innerText = bus.plateNumber || 'ND-0000';
+            document.getElementById('selectedBusSpeed').innerText = bus.speed ? `${Math.round(bus.speed)} km/h` : 'Moving';
+            document.getElementById('focusBusBtn').onclick = () => selectBus(bus.plateNumber || bus.id);
+        }
+
+        document.getElementById('closeOverlayBtn').addEventListener('click', () => {
+            document.getElementById('mapOverlayCard').classList.add('hidden');
+            selectedBusId = null;
+            renderBusesList();
+        });
+
+        // Search Filter Event Listeners
+        document.getElementById('routeQueryInput').addEventListener('input', renderBusesList);
+        document.getElementById('originSelectFilter').addEventListener('change', renderBusesList);
+        document.getElementById('destinationSelectFilter').addEventListener('change', renderBusesList);
+
+        // Pre-fill search parameters from query string if available
+        window.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            const from = params.get('from');
+            const to = params.get('to');
+            if (from || to) {
+                document.getElementById('routeQueryInput').value = `${from || ''} ${to || ''}`.trim();
+            }
+        });
+    </script>
+</body>
+</html>

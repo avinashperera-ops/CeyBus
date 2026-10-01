@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CeyBus — Authority Control Workspace</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f6f6f7',
+                            100: '#e0e0e0',
+                            900: '#0f0f11',
+                            dark: '#121214'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Leaflet CSS & JS for Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Socket.IO Client -->
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8f9fa;
+            color: #0f0f11;
+        }
+        #authorityMap {
+            height: 100%;
+            width: 100%;
+            z-index: 10;
+        }
+        .bus-marker-pulse {
+            border-radius: 50%;
+            box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+            animation: pulse-green 2s infinite;
+        }
+        @keyframes pulse-green {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased bg-neutral-100 selection:bg-black selection:text-white">
+
+    <!-- Top Admin Header -->
+    <header class="w-full bg-white border-b border-neutral-200/80 px-4 sm:px-8 py-3.5 flex items-center justify-between shrink-0 z-30 shadow-sm sticky top-0">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 bg-black text-white font-black text-xs flex items-center justify-center rounded-lg shadow-sm">
+                CB
+            </div>
+            <div>
+                <div class="flex items-center gap-2">
+                    <span class="text-base font-bold tracking-tight text-neutral-900">CeyBus</span>
+                    <span class="px-2 py-0.5 rounded-full bg-neutral-900 text-white text-[10px] font-bold uppercase tracking-wider">Authority Admin</span>
+                </div>
+                <p class="text-[10px] text-neutral-400 font-semibold">National Transport Commission Dashboard</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-4">
+            <div class="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-semibold">
+                <span id="adminSocketDot" class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span id="liveActiveBusesCounter">0 Buses Active</span>
+            </div>
+            <button id="adminLogoutBtn" class="px-4 py-1.5 text-xs font-semibold text-neutral-700 hover:text-black hover:bg-neutral-100 rounded-full transition-colors">
+                Log Out
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace Container -->
+    <main class="flex-1 p-4 sm:p-6 max-w-7xl w-full mx-auto flex flex-col gap-6">
+
+        <!-- Top Overview Stat Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-white rounded-2xl border border-neutral-200/80 p-5 shadow-sm">
+                <p class="text-[10px] text-neutral-400 uppercase font-bold tracking-wider">Active Fleet Live</p>
+                <p id="statActiveFleet" class="text-2xl font-black text-neutral-900 mt-1">0</p>
+                <p class="text-[10px] text-emerald-600 font-bold mt-1">● Broadcasting GPS</p>
+            </div>
+            <div class="bg-white rounded-2xl border border-neutral-200/80 p-5 shadow-sm">
+                <p class="text-[10px] text-neutral-400 uppercase font-bold tracking-wider">Registered Drivers</p>
+                <p id="statTotalDrivers" class="text-2xl font-black text-neutral-900 mt-1">0</p>
+                <p class="text-[10px] text-neutral-500 font-semibold mt-1">Verified Drivers</p>
+            </div>
+            <div class="bg-white rounded-2xl border border-neutral-200/80 p-5 shadow-sm">
+                <p class="text-[10px] text-neutral-400 uppercase font-bold tracking-wider">Pending Approvals</p>
+                <p id="statPendingDrivers" class="text-2xl font-black text-amber-600 mt-1">0</p>
+                <p class="text-[10px] text-amber-600 font-semibold mt-1">Requires Verification</p>
+            </div>
+            <div class="bg-white rounded-2xl border border-neutral-200/80 p-5 shadow-sm">
+                <p class="text-[10px] text-neutral-400 uppercase font-bold tracking-wider">Safety Incident Alerts</p>
+                <p id="statIncidentsCount" class="text-2xl font-black text-rose-600 mt-1">0</p>
+                <p class="text-[10px] text-rose-600 font-semibold mt-1">Active Incident Logs</p>
+            </div>
+        </div>
+
+        <!-- Middle Section: Map & Live Incident Stream -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- Map Container -->
+            <div class="lg:col-span-2 bg-white rounded-2xl border border-neutral-200/80 p-4 shadow-sm flex flex-col h-[400px]">
+                <div class="flex items-center justify-between pb-3 border-b border-neutral-100">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-neutral-800">Live Fleet Radar Overview</h3>
+                    <span class="text-[10px] text-neutral-400 font-semibold">Real-Time Telemetry</span>
+                </div>
+                <div class="flex-1 mt-3 rounded-xl overflow-hidden relative">
+                    <div id="authorityMap"></div>
+                </div>
+            </div>
+
+            <!-- Incident & Safety Log Feed -->
+            <div class="bg-white rounded-2xl border border-neutral-200/80 p-4 shadow-sm flex flex-col h-[400px]">
+                <div class="flex items-center justify-between pb-3 border-b border-neutral-100">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-rose-600 flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-rose-600 animate-pulse"></span>
+                        Incident Feed
+                    </h3>
+                    <button id="clearIncidentsBtn" class="text-[10px] text-neutral-400 hover:text-black font-semibold">Clear</button>
+                </div>
+                <div id="incidentsFeed" class="flex-1 overflow-y-auto mt-3 space-y-3 pr-1">
+                    <div class="text-center py-12 text-neutral-400 text-xs">
+                        No active safety incidents reported.
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Driver Approvals & Verification Table -->
+        <div class="bg-white rounded-2xl border border-neutral-200/80 p-5 shadow-sm">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-neutral-100">
+                <div>
+                    <h3 class="text-sm font-bold text-neutral-900">Driver Verification & Approvals</h3>
+                    <p class="text-xs text-neutral-400 mt-0.5">Manage operator credentials and approve pending registrations.</p>
+                </div>
+                <button id="refreshDriversBtn" class="self-start sm:self-auto px-3.5 py-1.5 text-xs font-bold text-neutral-700 bg-neutral-100 hover:bg-neutral-200 rounded-xl transition-colors">
+                    Refresh List
+                </button>
+            </div>
+
+            <div class="overflow-x-auto mt-4">
+                <table class="w-full text-left text-xs">
+                    <thead>
+                        <tr class="border-b border-neutral-100 text-neutral-400 uppercase font-bold text-[10px] tracking-wider">
+                            <th class="pb-3 px-2">Driver Name</th>
+                            <th class="pb-3 px-2">Plate Number</th>
+                            <th class="pb-3 px-2">NIC / License</th>
+                            <th class="pb-3 px-2">Contact</th>
+                            <th class="pb-3 px-2">Status</th>
+                            <th class="pb-3 px-2 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="driversTableBody" class="divide-y divide-neutral-100 font-medium text-neutral-800">
+                        <tr>
+                            <td colspan="6" class="py-8 text-center text-neutral-400 text-xs">
+                                Loading driver registries...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Script Logic -->
+    <script>
+        const socket = io();
+
+        let map;
+        let busMarkers = new Map();
+        let incidentsList = [];
+
+        // Initialize Map
+        function initMap() {
+            map = L.map('authorityMap', { zoomControl: false }).setView([6.9271, 79.8612], 11);
+            L.control.zoom({ position: 'topright' }).addTo(map);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap | CeyBus Authority'
+            }).addTo(map);
+        }
+
+        initMap();
+
+        // Socket Event Listeners
+        socket.on('connect', () => {
+            document.getElementById('adminSocketDot').className = 'w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse';
+            fetchDashboardData();
+        });
+
+        socket.on('disconnect', () => {
+            document.getElementById('adminSocketDot').className = 'w-1.5 h-1.5 rounded-full bg-rose-500';
+        });
+
+        socket.on('busLocationUpdated', (data) => {
+            if (data && data.plateNumber) {
+                updateOrAddMarker(data);
+            }
+        });
+
+        socket.on('busOffline', (data) => {
+            if (data && data.plateNumber && busMarkers.has(data.plateNumber)) {
+                map.removeLayer(busMarkers.get(data.plateNumber));
+                busMarkers.delete(data.plateNumber);
+                updateFleetCounter();
+            }
+        });
+
+        socket.on('newIncidentReported', (incident) => {
+            incidentsList.unshift(incident);
+            renderIncidents();
+        });
+
+        // Dashboard Data Fetching
+        async function fetchDashboardData() {
+            await Promise.all([
+                fetchActiveBuses(),
+                fetchDriversList(),
+                fetchIncidents()
+            ]);
+        }
+
+        async function fetchActiveBuses() {
+            try {
+                const res = await fetch('/api/buses/active');
+                if (res.ok) {
+                    const buses = await res.json();
+                    buses.forEach(b => updateOrAddMarker(b));
+                    updateFleetCounter();
+                }
+            } catch (err) {
+                console.warn('Error fetching active fleet:', err);
+            }
+        }
+
+        function updateOrAddMarker(bus) {
+            const lat = bus.latitude || bus.lat;
+            const lng = bus.longitude || bus.lng;
+            const id = bus.plateNumber || bus.id;
+
+            if (!lat || !lng || !id) return;
+
+            const customIcon = L.divIcon({
+                className: 'custom-bus-icon',
+                html: `
+                    <div class="w-7 h-7 bg-black text-white rounded-full flex items-center justify-center font-bold text-[9px] border-2 border-white shadow-md bus-marker-pulse">
+                        ${bus.routeNumber || 'CB'}
+                    </div>
+                `,
+                iconSize: [28, 28],
+                iconAnchor: [14, 14]
+            });
+
+            if (busMarkers.has(id)) {
+                busMarkers.get(id).setLatLng([lat, lng]);
+            } else {
+                const marker = L.marker([lat, lng], { icon: customIcon }).addTo(map);
+                busMarkers.set(id, marker);
+            }
+            updateFleetCounter();
+        }
+
+        function updateFleetCounter() {
+            const count = busMarkers.size;
+            document.getElementById('statActiveFleet').innerText = count;
+            document.getElementById('liveActiveBusesCounter').innerText = `${count} Buses Active`;
+        }
+
+        // Drivers List Management
+        async function fetchDriversList() {
+            try {
+                const res = await fetch('/api/authority/drivers');
+                if (res.ok) {
+                    const drivers = await res.json();
+                    renderDriversTable(drivers);
+                } else {
+                    renderDriversTable([]);
+                }
+            } catch (err) {
+                console.warn('Error fetching drivers:', err);
+                renderDriversTable([]);
+            }
+        }
+
+        function renderDriversTable(drivers) {
+            const tbody = document.getElementById('driversTableBody');
+            
+            let total = drivers.length;
+            let pending = drivers.filter(d => d.status === 'pending' || !d.approved).length;
+
+            document.getElementById('statTotalDrivers').innerText = total;
+            document.getElementById('statPendingDrivers').innerText = pending;
+
+            if (!drivers || drivers.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="py-8 text-center text-neutral-400 text-xs">
+                            No drivers found in the registry.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = drivers.map(d => {
+                const isApproved = d.status === 'approved' || d.approved;
+                const statusBadge = isApproved 
+                    ? `<span class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold">APPROVED</span>`
+                    : `<span class="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-bold">PENDING</span>`;
+
+                return `
+                    <tr class="hover:bg-neutral-50/50">
+                        <td class="py-3 px-2 font-bold">${d.fullName || d.name || 'N/A'}</td>
+                        <td class="py-3 px-2 font-mono font-bold text-neutral-600">${d.plateNumber || 'N/A'}</td>
+                        <td class="py-3 px-2 font-mono text-neutral-500">${d.nicNumber || d.licenseNo || 'N/A'}</td>
+                        <td class="py-3 px-2 text-neutral-600">${d.phone || 'N/A'}</td>
+                        <td class="py-3 px-2">${statusBadge}</td>
+                        <td class="py-3 px-2 text-right">
+                            ${!isApproved ? `
+                                <button onclick="approveDriver('${d.id || d.plateNumber}')" class="px-2.5 py-1 bg-black hover:bg-neutral-800 text-white font-bold text-[10px] rounded-lg transition-colors">
+                                    Approve
+                                </button>
+                            ` : `
+                                <span class="text-[10px] text-neutral-400 font-semibold">Verified</span>
+                            `}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function approveDriver(driverId) {
+            try {
+                const res = await fetch(`/api/authority/drivers/${driverId}/approve`, { method: 'POST' });
+                if (res.ok) {
+                    alert('Driver approved successfully.');
+                    fetchDriversList();
+                } else {
+                    alert('Failed to approve driver.');
+                }
+            } catch (err) {
+                console.error('Approval error:', err);
+            }
+        }
+
+        // Safety Incidents Fetching & Rendering
+        async function fetchIncidents() {
+            try {
+                const res = await fetch('/api/incidents');
+                if (res.ok) {
+                    incidentsList = await res.json();
+                    renderIncidents();
+                }
+            } catch (err) {
+                console.warn('Incident fetch error:', err);
+            }
+        }
+
+        function renderIncidents() {
+            const feed = document.getElementById('incidentsFeed');
+            document.getElementById('statIncidentsCount').innerText = incidentsList.length;
+
+            if (incidentsList.length === 0) {
+                feed.innerHTML = `
+                    <div class="text-center py-12 text-neutral-400 text-xs">
+                        No active safety incidents reported.
+                    </div>
+                `;
+                return;
+            }
+
+            feed.innerHTML = incidentsList.map(i => {
+                const time = i.timestamp ? new Date(i.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Now';
+                return `
+                    <div class="p-3 bg-rose-50/60 border border-rose-200/80 rounded-xl text-xs">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="font-bold text-rose-800">${i.type || 'Safety Alert'}</span>
+                            <span class="text-[10px] font-mono text-rose-500 font-bold">${time}</span>
+                        </div>
+                        <p class="text-neutral-700 font-medium mb-1.5">${i.details || 'No details provided.'}</p>
+                        <div class="flex justify-between text-[10px] font-mono font-bold text-neutral-500">
+                            <span>Vehicle: ${i.plateNumber || 'N/A'}</span>
+                            <span>Route: ${i.routeNumber || 'N/A'}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        document.getElementById('refreshDriversBtn').addEventListener('click', fetchDriversList);
+        document.getElementById('clearIncidentsBtn').addEventListener('click', () => {
+            incidentsList = [];
+            renderIncidents();
+        });
+
+        document.getElementById('adminLogoutBtn').addEventListener('click', () => {
+            window.location.href = '/authority-login.html';
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CeyBus — Sign In & Registration</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f0f11;
+            color: #ffffff;
+            -webkit-tap-highlight-color: transparent;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between antialiased selection:bg-white selection:text-black">
+
+    <header class="w-full border-b border-neutral-800/80 px-4 sm:px-6 py-4 flex items-center justify-between shrink-0">
+        <a href="/" class="flex items-center gap-2.5 group">
+            <div class="w-8 h-8 bg-white text-black font-black text-xs flex items-center justify-center rounded-lg shadow-sm group-hover:scale-105 transition-transform">
+                CB
+            </div>
+            <span class="text-lg font-bold tracking-tight text-white">CeyBus</span>
+        </a>
+
+        <a href="/authority-login.html" class="text-xs font-semibold text-neutral-400 hover:text-white transition-colors">
+            NTC Portal ➔
+        </a>
+    </header>
+
+    <main class="w-full max-w-md mx-auto px-4 py-8 flex-1 flex flex-col justify-center">
+
+        <div class="bg-neutral-900 rounded-3xl border border-neutral-800 p-6 sm:p-8 shadow-2xl">
+            
+            <div class="text-center mb-6">
+                <h1 id="authTitle" class="text-2xl font-black text-white tracking-tight">Access CeyBus</h1>
+                <p id="authSubtitle" class="text-xs text-neutral-400 font-semibold mt-1">Select your account type to proceed</p>
+            </div>
+
+            <!-- Role Selector -->
+            <div class="grid grid-cols-2 gap-1.5 p-1 bg-neutral-950 border border-neutral-800 rounded-2xl mb-6">
+                <button type="button" id="rolePassengerBtn" class="py-2.5 text-xs font-bold rounded-xl bg-white text-black shadow-sm transition-all">
+                    Passenger
+                </button>
+                <button type="button" id="roleDriverBtn" class="py-2.5 text-xs font-bold rounded-xl text-neutral-500 hover:text-white transition-all">
+                    Bus Driver
+                </button>
+            </div>
+
+            <form id="authForm" class="space-y-4">
+                
+                <div>
+                    <label id="identifierLabel" class="block text-xs font-bold text-neutral-400 uppercase tracking-wider mb-1.5">Mobile Number</label>
+                    <input type="text" id="userIdentifier" required placeholder="0760873304" class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs font-medium text-white placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-white">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-neutral-400 uppercase tracking-wider mb-1.5">Password</label>
+                    <input type="password" id="userPassword" required placeholder="••••••••••••" class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs font-medium text-white placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-white">
+                </div>
+
+                <!-- Driver Registration Database Fields (Hidden during Sign-In, Visible on Registration Click) -->
+                <div id="driverFields" class="space-y-4 hidden border-t border-neutral-800 pt-4 mt-2">
+                    <div>
+                        <label class="block text-xs font-bold text-neutral-400 uppercase tracking-wider mb-1.5">Full Name (DRIVER.Name)</label>
+                        <input type="text" id="driverFullName" placeholder="K.A. Suneth Perera" class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs font-medium text-white placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-white">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-neutral-400 uppercase tracking-wider mb-1.5">Driving License Number (DRIVER.License_No)</label>
+                        <input type="text" id="driverLicenseNo" placeholder="B1234567" class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs font-mono font-medium text-white placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-white">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-neutral-400 uppercase tracking-wider mb-1.5">Bus License Plate (BUS.Plate_No)</label>
+                        <input type="text" id="driverPlate" placeholder="ND-1230" class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs font-mono font-bold text-white placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-white">
+                    </div>
+                </div>
+
+                <button type="submit" id="submitAuthBtn" class="w-full py-3.5 bg-white hover:bg-neutral-200 text-black font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg transition-all mt-2">
+                    Sign In as Passenger
+                </button>
+            </form>
+
+            <div class="mt-6 text-center pt-4 border-t border-neutral-800">
+                <p id="authSwitchPrompt" class="text-xs text-neutral-400 font-medium">
+                    Don't have a passenger account? 
+                    <a href="#" id="registerToggleLink" class="text-white font-bold hover:underline ml-1">Register New Account</a>
+                </p>
+            </div>
+
+        </div>
+
+    </main>
+
+    <footer class="w-full border-t border-neutral-800/80 py-4 text-center text-xs text-neutral-500">
+        © 2026 CeyBus Sri Lanka • Public Transport Network
+    </footer>
+
+    <script>
+        const rolePassengerBtn = document.getElementById('rolePassengerBtn');
+        const roleDriverBtn = document.getElementById('roleDriverBtn');
+        const driverFields = document.getElementById('driverFields');
+        const submitAuthBtn = document.getElementById('submitAuthBtn');
+        const authSwitchPrompt = document.getElementById('authSwitchPrompt');
+        const userIdentifier = document.getElementById('userIdentifier');
+        const identifierLabel = document.getElementById('identifierLabel');
+
+        const driverFullName = document.getElementById('driverFullName');
+        const driverLicenseNo = document.getElementById('driverLicenseNo');
+        const driverPlate = document.getElementById('driverPlate');
+
+        let selectedRole = 'passenger';
+        let isRegistrationMode = false;
+
+        rolePassengerBtn.addEventListener('click', () => {
+            selectedRole = 'passenger';
+            isRegistrationMode = false;
+            
+            rolePassengerBtn.className = 'py-2.5 text-xs font-bold rounded-xl bg-white text-black shadow-sm transition-all';
+            roleDriverBtn.className = 'py-2.5 text-xs font-bold rounded-xl text-neutral-500 hover:text-white transition-all';
+            
+            identifierLabel.innerText = 'Email / Mobile Number';
+            driverFields.classList.add('hidden');
+            setRequiredDriverFields(false);
+
+            submitAuthBtn.innerText = 'Sign In as Passenger';
+            updateFooterPrompt();
+        });
+
+        roleDriverBtn.addEventListener('click', () => {
+            selectedRole = 'driver';
+            isRegistrationMode = false;
+            
+            roleDriverBtn.className = 'py-2.5 text-xs font-bold rounded-xl bg-white text-black shadow-sm transition-all';
+            rolePassengerBtn.className = 'py-2.5 text-xs font-bold rounded-xl text-neutral-500 hover:text-white transition-all';
+            
+            identifierLabel.innerText = 'Phone Number (DRIVER.Phone_Number)';
+            driverFields.classList.add('hidden');
+            setRequiredDriverFields(false);
+
+            submitAuthBtn.innerText = 'Sign In as Driver';
+            updateFooterPrompt();
+        });
+
+        function setRequiredDriverFields(required) {
+            if (required) {
+                driverFullName.setAttribute('required', 'required');
+                driverLicenseNo.setAttribute('required', 'required');
+            } else {
+                driverFullName.removeAttribute('required');
+                driverLicenseNo.removeAttribute('required');
+            }
+        }
+
+        function updateFooterPrompt() {
+            if (selectedRole === 'passenger') {
+                authSwitchPrompt.innerHTML = isRegistrationMode 
+                    ? `Already registered? <a href="#" id="registerToggleLink" class="text-white font-bold hover:underline ml-1">Sign In as Passenger</a>`
+                    : `Don't have a passenger account? <a href="#" id="registerToggleLink" class="text-white font-bold hover:underline ml-1">Register New Account</a>`;
+            } else {
+                authSwitchPrompt.innerHTML = isRegistrationMode
+                    ? `Already registered? <a href="#" id="registerToggleLink" class="text-white font-bold hover:underline ml-1">Sign In as Driver</a>`
+                    : `Need vehicle approval? <a href="#" id="registerToggleLink" class="text-white font-bold hover:underline ml-1">Submit Driver Application</a>`;
+            }
+            attachRegisterHandler();
+        }
+
+        function attachRegisterHandler() {
+            const link = document.getElementById('registerToggleLink');
+            if (link) {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    isRegistrationMode = !isRegistrationMode;
+
+                    if (selectedRole === 'passenger') {
+                        driverFields.classList.add('hidden');
+                        setRequiredDriverFields(false);
+                        submitAuthBtn.innerText = isRegistrationMode ? 'Create Passenger Account' : 'Sign In as Passenger';
+                        userIdentifier.focus();
+                    } else {
+                        if (isRegistrationMode) {
+                            driverFields.classList.remove('hidden');
+                            setRequiredDriverFields(true);
+                            submitAuthBtn.innerText = 'Submit Driver Application';
+                            driverFullName.focus();
+                        } else {
+                            driverFields.classList.add('hidden');
+                            setRequiredDriverFields(false);
+                            submitAuthBtn.innerText = 'Sign In as Driver';
+                            userIdentifier.focus();
+                        }
+                    }
+                    updateFooterPrompt();
+                });
+            }
+        }
+
+        document.getElementById('authForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const identifier = userIdentifier.value.trim();
+            const password = document.getElementById('userPassword').value;
+
+            if (selectedRole === 'passenger') {
+                localStorage.setItem('ceybus_user_role', 'passenger');
+                window.location.href = '/passenger.html';
+                return;
+            }
+
+            const fullName = driverFullName.value.trim();
+            const licenseNo = driverLicenseNo.value.trim();
+            const plateNumber = driverPlate.value.trim();
+
+            const payload = {
+                isRegistration: isRegistrationMode,
+                identifier,
+                password,
+                fullName,
+                licenseNo,
+                plateNumber
+            };
+
+            try {
+                const res = await fetch('/api/auth/driver', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    localStorage.setItem('ceybus_user_role', 'driver');
+                    localStorage.setItem('ceybus_driver', JSON.stringify(data.driver));
+                    window.location.href = '/driver.html';
+                } else {
+                    alert(data.message || 'Authentication failed.');
+                }
+            } catch (err) {
+                localStorage.setItem('ceybus_user_role', 'driver');
+                localStorage.setItem('ceybus_driver', JSON.stringify({ fullName, licenseNo, plateNumber }));
+                window.location.href = '/driver.html';
+            }
+        });
+
+        attachRegisterHandler();
+    </script>
+</body>
+</html>

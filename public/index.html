@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CeyBus — Smart Public Transport System</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f6f6f7',
+                            100: '#e0e0e0',
+                            900: '#0f0f11',
+                            dark: '#121214'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Socket.IO Client -->
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #fcfcfc;
+            color: #0f0f11;
+            -webkit-tap-highlight-color: transparent;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between antialiased selection:bg-black selection:text-white">
+
+    <!-- Top Navigation Bar -->
+    <header class="w-full max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6 flex items-center justify-between">
+        <a href="/" class="flex items-center gap-2.5 sm:gap-3 group">
+            <div class="w-8 h-8 sm:w-9 sm:h-9 bg-black text-white font-black text-xs flex items-center justify-center rounded-lg shadow-sm group-hover:scale-105 transition-transform">
+                CB
+            </div>
+            <span class="text-lg sm:text-xl font-bold tracking-tight text-neutral-900">CeyBus</span>
+        </a>
+
+        <div class="flex items-center gap-1.5 sm:gap-3">
+            <a href="/login.html" class="px-3.5 sm:px-5 py-2 sm:py-2.5 text-xs font-semibold text-neutral-700 hover:text-black transition-colors rounded-full hover:bg-neutral-100">
+                Sign In
+            </a>
+            <a href="/login.html?tab=signup" class="px-3.5 sm:px-5 py-2 sm:py-2.5 text-xs font-semibold text-white bg-black hover:bg-neutral-800 transition-all rounded-full shadow-sm hover:shadow">
+                Get Started
+            </a>
+        </div>
+    </header>
+
+    <!-- Main Hero Section -->
+    <main class="w-full max-w-5xl mx-auto px-4 sm:px-6 pt-6 sm:pt-12 pb-12 sm:pb-20 flex-1 flex flex-col items-center text-center">
+        
+        <!-- Hero Headline -->
+        <h1 class="text-3xl sm:text-5xl md:text-7xl font-extrabold tracking-tight text-neutral-900 leading-[1.12] sm:leading-[1.08] max-w-3xl">
+            Live transit tracking, built for safer journeys.
+        </h1>
+        
+        <!-- Hero Subtitle -->
+        <p class="mt-4 sm:mt-6 text-xs sm:text-base text-neutral-500 max-w-2xl font-normal leading-relaxed px-2">
+            Track active public buses islandwide in real time, view route stops, and experience smart public transport monitored for safety and accountability.
+        </p>
+
+        <!-- CTA Buttons -->
+        <div class="mt-6 sm:mt-8 flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 w-full sm:w-auto px-4 sm:px-0">
+            <a href="/passenger.html" class="px-6 py-3.5 bg-black hover:bg-neutral-800 text-white text-xs font-semibold rounded-full shadow-md transition-all flex items-center justify-center gap-2">
+                <span>Track Live Buses</span>
+            </a>
+            <a href="/login.html?role=driver" class="px-6 py-3.5 bg-white hover:bg-neutral-50 text-neutral-700 border border-neutral-200 text-xs font-semibold rounded-full shadow-sm transition-all text-center">
+                Driver Trip Console
+            </a>
+        </div>
+
+        <!-- Quick Route Lookup Bar -->
+        <form id="routeSearchForm" class="mt-8 sm:mt-10 w-full max-w-2xl bg-white border border-neutral-200/80 rounded-2xl sm:rounded-full p-2.5 sm:p-2 sm:pl-6 shadow-xl shadow-neutral-200/40 flex flex-col sm:flex-row items-center gap-2 sm:gap-3">
+            <div class="flex-1 flex items-center gap-3 w-full px-2 sm:px-0 py-1 sm:py-0">
+                <svg class="w-4 h-4 text-neutral-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="9" stroke-width="2"/>
+                </svg>
+                <input type="text" id="originInput" placeholder="From: e.g. Pettah / Kandy" class="w-full bg-transparent text-xs text-neutral-800 placeholder-neutral-400 focus:outline-none font-medium">
+            </div>
+
+            <div class="hidden sm:block h-5 w-[1px] bg-neutral-200"></div>
+
+            <div class="flex-1 flex items-center gap-3 w-full px-2 sm:px-0 py-1 sm:py-0">
+                <svg class="w-4 h-4 text-neutral-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/>
+                </svg>
+                <input type="text" id="destinationInput" placeholder="To: e.g. Maharagama / Galle" class="w-full bg-transparent text-xs text-neutral-800 placeholder-neutral-400 focus:outline-none font-medium">
+            </div>
+
+            <button type="submit" class="w-full sm:w-auto px-6 py-3 bg-black hover:bg-neutral-800 text-white text-xs font-semibold rounded-xl sm:rounded-full transition-all shrink-0">
+                Search
+            </button>
+        </form>
+
+        <!-- Dynamic Live UI Telemetry Grid -->
+        <div class="mt-12 sm:mt-16 w-full max-w-4xl relative overflow-hidden rounded-2xl border border-neutral-200/60 bg-gradient-to-b from-neutral-50/50 to-white p-4 sm:p-8 md:p-10">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 sm:mb-8 text-left">
+                <div>
+                    <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-semibold">
+                        <span id="connectionDot" class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span id="activeBusesCount">Connecting...</span>
+                    </span>
+                    <h3 class="mt-2.5 text-base sm:text-lg font-bold text-neutral-900">National Transit Telemetry Grid</h3>
+                </div>
+                <div class="text-left sm:text-right">
+                    <p class="text-[11px] sm:text-xs text-neutral-400 font-medium">Islandwide Live Stream</p>
+                    <p id="liveStatusSubtext" class="text-xs text-neutral-700 font-semibold mt-0.5">Listening for active routes...</p>
+                </div>
+            </div>
+
+            <!-- Dynamic Telemetry Card -->
+            <div class="bg-white rounded-xl border border-neutral-200/80 p-4 sm:p-6 shadow-sm text-left relative overflow-hidden">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 sm:pb-6 border-b border-neutral-100">
+                    <div class="flex items-center gap-3">
+                        <div id="routeBadge" class="w-10 h-10 rounded-lg bg-neutral-900 text-white flex items-center justify-center text-xs font-bold shrink-0">
+                            --
+                        </div>
+                        <div class="min-w-0">
+                            <p id="routeNameDisplay" class="text-xs sm:text-sm font-bold text-neutral-900 truncate">Searching active fleet...</p>
+                            <p id="routeSubDisplay" class="text-[11px] text-neutral-500 mt-0.5 truncate">Waiting for live location signals</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-between sm:justify-end gap-2">
+                        <span id="busStatusBadge" class="px-2.5 py-1 bg-neutral-100 text-neutral-600 rounded text-[10px] font-semibold tracking-wide uppercase">
+                            OFFLINE
+                        </span>
+                        <span id="plateNumberDisplay" class="text-xs font-mono font-bold text-neutral-900">--</span>
+                    </div>
+                </div>
+
+                <!-- Dynamic Progress Indicator -->
+                <div class="pt-4 sm:pt-6">
+                    <div class="flex justify-between text-[11px] font-semibold text-neutral-500 mb-2">
+                        <span id="originTerminalLabel" class="truncate max-w-[30%]">Start</span>
+                        <span id="midpointStatusLabel" class="text-emerald-600 font-bold truncate max-w-[38%] text-center">Standby</span>
+                        <span id="destinationTerminalLabel" class="truncate max-w-[30%] text-right">Destination</span>
+                    </div>
+                    <div class="w-full bg-neutral-100 h-2 rounded-full overflow-hidden relative">
+                        <div id="routeProgressBar" class="bg-black h-full rounded-full transition-all duration-700" style="width: 0%;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="w-full border-t border-neutral-200/60 py-6 text-center text-xs text-neutral-400 px-4">
+        © 2026 CeyBus Smart Public Transport System. Built for Milestone 2.
+    </footer>
+
+    <!-- Client Real-Time Telemetry Script -->
+    <script>
+        const socket = io();
+
+        // UI DOM Elements
+        const activeBusesCountEl = document.getElementById('activeBusesCount');
+        const connectionDotEl = document.getElementById('connectionDot');
+        const liveStatusSubtextEl = document.getElementById('liveStatusSubtext');
+        const routeBadgeEl = document.getElementById('routeBadge');
+        const routeNameDisplayEl = document.getElementById('routeNameDisplay');
+        const routeSubDisplayEl = document.getElementById('routeSubDisplay');
+        const busStatusBadgeEl = document.getElementById('busStatusBadge');
+        const plateNumberDisplayEl = document.getElementById('plateNumberDisplay');
+        const originTerminalLabelEl = document.getElementById('originTerminalLabel');
+        const midpointStatusLabelEl = document.getElementById('midpointStatusLabel');
+        const destinationTerminalLabelEl = document.getElementById('destinationTerminalLabel');
+        const routeProgressBarEl = document.getElementById('routeProgressBar');
+
+        let activeBusesMap = new Map();
+
+        // Socket Connection Handlers
+        socket.on('connect', () => {
+            connectionDotEl.className = 'w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse';
+            fetchInitialFleetData();
+        });
+
+        socket.on('disconnect', () => {
+            connectionDotEl.className = 'w-1.5 h-1.5 rounded-full bg-rose-500';
+            activeBusesCountEl.innerText = 'Disconnected';
+        });
+
+        // Live Fleet Counter Event
+        socket.on('busCountUpdate', (data) => {
+            if (data && typeof data.count === 'number') {
+                updateFleetCounter(data.count);
+            }
+        });
+
+        // Live Bus Location Broadcasting Stream
+        socket.on('busLocationUpdated', (data) => {
+            if (data && data.plateNumber) {
+                activeBusesMap.set(data.plateNumber, data);
+                updateFleetCounter(activeBusesMap.size);
+                renderLatestBusTelemetry(data);
+            }
+        });
+
+        // Bus Offline Stream Event
+        socket.on('busOffline', (data) => {
+            if (data && data.plateNumber) {
+                activeBusesMap.delete(data.plateNumber);
+                updateFleetCounter(activeBusesMap.size);
+                if (activeBusesMap.size > 0) {
+                    const nextBus = Array.from(activeBusesMap.values())[0];
+                    renderLatestBusTelemetry(nextBus);
+                } else {
+                    renderEmptyTelemetry();
+                }
+            }
+        });
+
+        // Fetch Live Initial State
+        async function fetchInitialFleetData() {
+            try {
+                const res = await fetch('/api/buses/active');
+                if (res.ok) {
+                    const buses = await res.json();
+                    if (Array.isArray(buses) && buses.length > 0) {
+                        buses.forEach(b => activeBusesMap.set(b.plateNumber || b.id, b));
+                        updateFleetCounter(activeBusesMap.size);
+                        renderLatestBusTelemetry(buses[0]);
+                    } else {
+                        updateFleetCounter(0);
+                        renderEmptyTelemetry();
+                    }
+                } else {
+                    updateFleetCounter(0);
+                    renderEmptyTelemetry();
+                }
+            } catch (err) {
+                console.warn('Initial fleet fetch standby:', err);
+                updateFleetCounter(0);
+                renderEmptyTelemetry();
+            }
+        }
+
+        function updateFleetCounter(count) {
+            activeBusesCountEl.innerText = `${count} ${count === 1 ? 'Bus' : 'Buses'} Online`;
+        }
+
+        // Render Dynamic Telemetry
+        function renderLatestBusTelemetry(busData) {
+            const routeNo = busData.routeNumber || busData.routeId || '138';
+            const origin = busData.origin || busData.from || 'Origin Terminal';
+            const destination = busData.destination || busData.to || 'Destination Terminal';
+            const plate = busData.plateNumber || busData.plateNo || 'ND-0000';
+            
+            // Calculate progress percentage dynamically if telemetry provides coordinates or percentage
+            let progress = 50;
+            if (typeof busData.progress === 'number') {
+                progress = Math.min(100, Math.max(0, busData.progress));
+            } else if (busData.speed) {
+                progress = (Date.now() % 10000) / 100; // Dynamic telemetry pulse simulation when stationary
+            }
+
+            routeBadgeEl.innerText = routeNo;
+            routeNameDisplayEl.innerText = `${origin} ⇄ ${destination}`;
+            routeSubDisplayEl.innerText = `Active Speed: ${busData.speed ? Math.round(busData.speed) + ' km/h' : 'In Transit'}`;
+            
+            busStatusBadgeEl.innerText = 'ACTIVE BUS';
+            busStatusBadgeEl.className = 'px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded text-[10px] font-semibold tracking-wide uppercase';
+            
+            plateNumberDisplayEl.innerText = plate;
+            liveStatusSubtextEl.innerText = `Route ${routeNo} • ${origin} - ${destination}`;
+
+            originTerminalLabelEl.innerText = origin;
+            destinationTerminalLabelEl.innerText = destination;
+            midpointStatusLabelEl.innerText = `Live Tracking (${Math.round(progress)}%)`;
+            routeProgressBarEl.style.width = `${progress}%`;
+        }
+
+        function renderEmptyTelemetry() {
+            routeBadgeEl.innerText = 'CB';
+            routeNameDisplayEl.innerText = 'Islandwide Network Standby';
+            routeSubDisplayEl.innerText = 'Awaiting active bus telemetry signals across routes';
+            
+            busStatusBadgeEl.innerText = 'STANDBY';
+            busStatusBadgeEl.className = 'px-2.5 py-1 bg-neutral-100 text-neutral-600 rounded text-[10px] font-semibold tracking-wide uppercase';
+            
+            plateNumberDisplayEl.innerText = 'SYS-READY';
+            liveStatusSubtextEl.innerText = 'All Island Transit Monitoring Active';
+
+            originTerminalLabelEl.innerText = 'Terminal A';
+            destinationTerminalLabelEl.innerText = 'Terminal B';
+            midpointStatusLabelEl.innerText = 'No Active Drivers';
+            routeProgressBarEl.style.width = '0%';
+        }
+
+        // Quick Search Redirect
+        document.getElementById('routeSearchForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const origin = document.getElementById('originInput').value.trim();
+            const destination = document.getElementById('destinationInput').value.trim();
+            
+            if (origin || destination) {
+                window.location.href = `/passenger.html?from=${encodeURIComponent(origin)}&to=${encodeURIComponent(destination)}`;
+            } else {
+                window.location.href = '/passenger.html';
+            }
+        });
+    </script>
+</body>
+</html>
