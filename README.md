@@ -88,3 +88,10 @@ CeyBus/
 ```
 **License**
 Distributed under the MIT License.
+
+**Screenshots**
+<img width="3199" height="1597" alt="Screenshot 2026-10-01 115735" src="https://github.com/user-attachments/assets/c4406aa7-0591-427c-a9d9-e80827545f4f" />
+
+<img width="3199" height="1611" alt="Screenshot 2026-10-01 115724" src="https://github.com/user-attachments/assets/00dfdd8c-26de-4e99-ba0e-5754c94113a9" />
+
+<img width="3199" height="1611" alt="Screenshot 2026-10-01 115707" src="https://github.com/user-attachments/assets/707f28c9-36d2-4615-95db-e5420b583be0" />
