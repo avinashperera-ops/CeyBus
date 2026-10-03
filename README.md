@@ -1,92 +1,95 @@
 # CeyBus
 
-CeyBus is a web application designed for real-time public transit tracking. It helps commuters monitor bus locations on a live map, view active route paths, and get calculated arrival times and status updates for approaching vehicles.
+CeyBus is a real-time public transit tracking and visualization platform built for Sri Lanka's public transport network. It enables commuters to monitor live bus positions, view directional route paths (Outbound/Inbound), track real-time telemetry speed, and calculate ETA estimates along active transit corridors.
 
 ---
 
 ## Key Features
 
-- **Live GPS Updates:** Displays bus positions on an interactive dark-themed map using Socket.io for real-time data streaming.
-- **Dynamic Route Mapping:** Draws full route paths when a specific transit line (such as Route 100, 101, or 138) is selected.
-- **User Geolocation:** Detects the passenger's current location via browser coordinates to show distance relative to nearby buses.
-- **ETA and Status Tracking:** Uses distance algorithms based on route waypoints and the Haversine formula to check whether a bus is on its way or has already passed, providing updated arrival estimates.
-- **Commuter Control Panel:** A side panel showing route selection options, user location status, and details for the selected bus.
+* **Direction-Aware Animated Route Mapping**: Draws complete bus routes (e.g., Route 100 Pettah ⇌ Panadura) using dual-carriageway Leaflet layers. Dynamically detects Northbound vs. Southbound line segment vectors to stream directional animated dash overlays matching actual bus travel.
+* **Live Telemetry & GPS Streaming**: Real-time position, speed (0 km/h stop detection), and heading synchronization via Socket.io.
+* **Smart Route & Filter Panel**: Filter live buses across origins, destinations, and specific route identifiers with instant map focus and telemetry overlays.
+* **Geofenced Arrival & Distance Tracking**: Calculates real-time distance and ETA estimates relative to user location and route waypoints using Haversine distance matrix logic.
+* **OpenStreetMap Transit Ingestion**: Built-in automated seed pipeline that parses raw Sri Lankan OpenStreetMap transport relation data directly into Leaflet-ready GeoJSON structures.
 
 ---
 
 ## Tech Stack
 
-- **Frontend:** HTML5, CSS3, JavaScript (ES6+), Leaflet.js
-- **Backend:** Node.js, Express.js, Socket.io
-- **Database:** MySQL
-- **Map Tiles:** CARTO Dark Matter
+* **Frontend**: HTML5, CSS3, JavaScript (ES6+), Leaflet.js, Socket.io Client
+* **Backend**: Node.js, Express.js, Socket.io
+* **Database**: MySQL / Cloud Database Integration
+* **GIS & Mapping**: OpenStreetMap Data, GeoJSON, CARTO Basemaps
+
+---
+
+## Technical Highlights & Architecture
+
+### Directional Dash Animation Engine
+To handle dual-carriageway roadways and separate return lanes without city-crossing vector artifacts, CeyBus processes GeoJSON line segments individually:
+* Evaluates geographic latitude progressions ($\text{lat}_{\text{start}} > \text{lat}_{\text{end}}$) per segment.
+* Dynamically assigns CSS keyframe animations (`.route-flow-forward` / `.route-flow-reverse`) based on whether the bus is operating **Outbound** or **Inbound**.
 
 ---
 
 ## Getting Started
 
 ### Prerequisites
-
-You will need the following installed on your system:
-
-- Node.js (v14.x or higher)
-- npm
-- MySQL Server
+* **Node.js**: `v18.x` or higher
+* **npm**: `v9.x` or higher
+* **MySQL**: Local or cloud-hosted instance
 
 ### Local Setup
 
-1. **Clone the repository:**
-   ```bash
-   git clone [https://github.com/](https://github.com/)<YOUR_GITHUB_USERNAME>/CeyBus.git
+1. **Clone the Repository**:
+   git clone https://github.com/avinashperera-ops/CeyBus.git
    cd CeyBus
 
-2. **Install Dependencies:**
-   ```bash
+2. **Install Dependencies**:
    npm install
 
-3. **Set up environment variables:**
-Create a .env file in the root directory with your setup details:
-```bash
-PORT=3000
-DB_HOST=localhost
-DB_USER=root
-DB_PASSWORD=your_password
-DB_NAME=ceybus_db
-```
-4. **Database Configuration:**
-Import your database schema into MySQL to initialize the necessary tables for routes, stops, and schedules.
+3. **Configure Environment Variables**:
+   Create a `.env` file in the root directory:
+   PORT=3000
+   DB_HOST=localhost
+   DB_USER=root
+   DB_PASSWORD=your_password
+   DB_NAME=ceybus_db
 
-5. **Start the application:**
-```bash
-# Development mode
-npm run dev
+4. **Seed Route Data**:
+   node seed_routes.js
 
-# Production mode
-npm start
-```
-6. **View the application:**
-Open your browser and navigate to
-```bash
-http://localhost:3000
-```
+5. **Run the Application**:
+   npm run dev
 
-**Repository Structure**
-```bash
+6. **Access in Browser**:
+   Navigate to http://localhost:3000/passenger.html
+
+---
+
+## Repository Structure
+
 CeyBus/
 ├── public/
-│   ├── index.html       # Map interface and socket client script
-│   ├── css/             # Application styles
-│   └── js/              # Frontend logic
+│   ├── passenger.html         # Live passenger map & tracking interface
+│   ├── app.js                 # Leaflet map instance, socket listeners, and flow animations
+│   ├── css/                   # Application styling & CSS dash flow keyframes
+│   └── js/                    # Client utility scripts
 ├── src/
-│   ├── config/          # Database configuration
-│   ├── controllers/     # Controller handlers
-│   ├── routes/          # Express route definitions
-│   └── socket/          # Socket.io event handlers
-├── .gitignore
+│   ├── config/                # Database connections (MySQL)
+│   ├── controllers/           # Route geometry & telemetry handlers
+│   ├── routes/                # Express API endpoints (/api/routes/:id/shape)
+│   └── socket/                # Socket.io event dispatchers
+├── seed_routes.js             # GIS shape importer & route seeder script
+├── sri_lanka_raw_routes.json  # Raw OpenStreetMap Sri Lanka transit relation data
+├── .env.example               # Environment variables template
 ├── package.json
 └── README.md
-```
-**License**
+
+---
+
+## License
+
 Distributed under the MIT License.
 
 **Screenshots**
