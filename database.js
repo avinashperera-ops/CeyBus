@@ -3,7 +3,6 @@ const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcrypt');
 const path = require('path');
 
-// Initialize database connection
 const db = new sqlite3.Database(path.join(__dirname, 'bus_tracker.db'), (err) => {
     if (err) {
         console.error('Failed to connect to SQLite database:', err.message);
@@ -39,6 +38,15 @@ db.serialize(async () => {
     Route_Name TEXT NOT NULL,
     Start_Point TEXT NOT NULL,
     End_Point TEXT NOT NULL
+  )`);
+
+  // NEW: ROUTE SHAPES (Stores GeoJSON Polylines)
+  db.run(`CREATE TABLE IF NOT EXISTS ROUTE_SHAPE (
+    Shape_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+    Route_Number TEXT UNIQUE NOT NULL,
+    Origin TEXT,
+    Destination TEXT,
+    Shape_GeoJSON TEXT NOT NULL
   )`);
 
   // BUS
@@ -120,5 +128,4 @@ db.serialize(async () => {
     (3, '177 Kaduwela - Kollupitiya', 'Kaduwela', 'Kollupitiya')`);
 });
 
-// Export the db connection instance
 module.exports = db;

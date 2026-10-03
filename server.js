@@ -61,6 +61,43 @@ app.get('/api/buses/active', (req, res) => {
     res.json(Array.from(activeBuses.values()));
 });
 
+// ROUTE SHAPES ENDPOINT (Serves static GeoJSON route lines to Leaflet)
+// ROUTE SHAPES ENDPOINT
+app.get('/api/routes/:routeNumber/shape', (req, res) => {
+    const rawRoute = req.params.routeNumber.trim();
+    // Extracts numeric value e.g., "Route 100" -> "100"
+    const cleanRoute = rawRoute.replace(/[^0-9]/g, '');
+
+    db.get(
+        `SELECT Shape_GeoJSON, Origin, Destination FROM ROUTE_SHAPE 
+         WHERE Route_Number = ? 
+            OR Route_Number = ? 
+            OR Route_Number = ?`,
+        [rawRoute, cleanRoute, `Route ${cleanRoute}`],
+        (err, row) => {
+            if (err) {
+                return res.status(500).json({ success: false, message: 'Database query error.' });
+            }
+            if (!row) {
+                return res.status(404).json({ success: false, message: `Route ${rawRoute} shape not found.` });
+            }
+
+            try {
+                const geojson = JSON.parse(row.Shape_GeoJSON);
+                res.json({
+                    success: true,
+                    routeNumber: rawRoute,
+                    origin: row.Origin,
+                    destination: row.Destination,
+                    geojson
+                });
+            } catch (parseError) {
+                res.status(500).json({ success: false, message: 'Invalid GeoJSON string format.' });
+            }
+        }
+    );
+});;
+
 // Endpoint for driver incident reporting
 app.post('/api/incidents', (req, res) => {
     const { plateNumber, routeNumber, type, details, timestamp } = req.body;
