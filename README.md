@@ -42,14 +42,17 @@ To handle dual-carriageway roadways and separate return lanes without city-cross
 ### Local Setup
 
 1. **Clone the Repository**:
+   ```
    git clone https://github.com/avinashperera-ops/CeyBus.git
    cd CeyBus
 
 2. **Install Dependencies**:
+   ```
    npm install
 
 3. **Configure Environment Variables**:
    Create a `.env` file in the root directory:
+   ```
    PORT=3000
    DB_HOST=localhost
    DB_USER=root
@@ -57,17 +60,21 @@ To handle dual-carriageway roadways and separate return lanes without city-cross
    DB_NAME=ceybus_db
 
 4. **Seed Route Data**:
+   ```
    node seed_routes.js
 
 5. **Run the Application**:
+   ```
    npm run dev
 
 6. **Access in Browser**:
+```
    Navigate to http://localhost:3000/passenger.html
 
----
+```
 
 ## Repository Structure
+```
 
 CeyBus/
 ├── public/
@@ -86,7 +93,7 @@ CeyBus/
 ├── package.json
 └── README.md
 
----
+```
 
 ## License
 
