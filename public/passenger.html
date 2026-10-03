@@ -35,26 +35,26 @@
     <!-- Socket.IO Client -->
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        /* Modern Monochrome Animated Dash Flow */
-        @keyframes dash-flow-outbound {
-            from { stroke-dashoffset: 24; }
-            to { stroke-dashoffset: 0; }
-        }
+        /* Dual-Direction Aware Dash Flow Animations */
+@keyframes dash-flow-forward {
+    from { stroke-dashoffset: 24; }
+    to { stroke-dashoffset: 0; }
+}
 
-        @keyframes dash-flow-inbound {
-            from { stroke-dashoffset: 0; }
-            to { stroke-dashoffset: 24; }
-        }
+@keyframes dash-flow-reverse {
+    from { stroke-dashoffset: 0; }
+    to { stroke-dashoffset: 24; }
+}
 
-        .route-animated-outbound {
-            stroke-dasharray: 8, 12;
-            animation: dash-flow-outbound 1.2s linear infinite;
-        }
+.route-flow-forward {
+    stroke-dasharray: 6, 12;
+    animation: dash-flow-forward 0.8s linear infinite;
+}
 
-        .route-animated-inbound {
-            stroke-dasharray: 8, 12;
-            animation: dash-flow-inbound 1.2s linear infinite;
-        }
+.route-flow-reverse {
+    stroke-dasharray: 6, 12;
+    animation: dash-flow-reverse 0.8s linear infinite;
+}
 
         body {
             font-family: 'Inter', sans-serif;
@@ -203,78 +203,138 @@
 
         initMap();
 
-        // Load Modern Monochrome Route GeoJSON Shape with Directional Flow
-        function loadBusRouteOnMap(routeInput, direction = 'Outbound') {
-            if (!routeInput) return;
+        // Recursively reverse GeoJSON coordinate order for Inbound routes
+        function reverseGeoJSONCoordinates(geojson) {
+            const cloned = JSON.parse(JSON.stringify(geojson));
 
-            const cleanRoute = String(routeInput).replace(/[^0-9]/g, '');
-            console.log(`[GeoJSON] Requesting route shape for Route ${cleanRoute} (${direction})...`);
+            function reverseCoords(coords, type) {
+                if (type === 'LineString') {
+                    return coords.slice().reverse();
+                } else if (type === 'MultiLineString') {
+                    return coords.map(line => line.slice().reverse()).reverse();
+                }
+                return coords;
+            }
 
-            fetch(`/api/routes/${cleanRoute}/shape`)
-                .then(res => res.json())
-                .then(data => {
-                    if (!data.success || !data.geojson) {
-                        console.warn(`No shape found for route: ${cleanRoute}`);
-                        return;
+            if (cloned.type === 'FeatureCollection') {
+                cloned.features.forEach(f => {
+                    if (f.geometry) {
+                        f.geometry.coordinates = reverseCoords(f.geometry.coordinates, f.geometry.type);
                     }
+                });
+            } else if (cloned.type === 'Feature') {
+                if (cloned.geometry) {
+                    cloned.geometry.coordinates = reverseCoords(cloned.geometry.coordinates, cloned.geometry.type);
+                }
+            } else if (cloned.coordinates) {
+                cloned.coordinates = reverseCoords(cloned.coordinates, cloned.type);
+            }
 
-                    // Remove existing route layers
-                    if (currentRouteLayer) {
-                        map.removeLayer(currentRouteLayer);
-                    }
-
-                    const isOutbound = String(direction).toLowerCase() !== 'inbound';
-                    const animClass = isOutbound ? 'route-animated-outbound' : 'route-animated-inbound';
-
-                    // Create a custom LayerGroup for casing + core line + animated flow
-                    const routeGroup = L.layerGroup();
-
-                    // Layer 1: Dark Casing / Outer Track
-                    const casingLayer = L.geoJSON(data.geojson, {
-                        style: {
-                            color: '#09090b',
-                            weight: 8,
-                            opacity: 0.85,
-                            lineCap: 'round',
-                            lineJoin: 'round'
-                        }
-                    });
-
-                    // Layer 2: Modern Off-White Core Line
-                    const coreLayer = L.geoJSON(data.geojson, {
-                        style: {
-                            color: '#f4f4f5',
-                            weight: 4,
-                            opacity: 0.95,
-                            lineCap: 'round',
-                            lineJoin: 'round'
-                        }
-                    });
-
-                    // Layer 3: Animated Directional Flow Line
-                    const flowLayer = L.geoJSON(data.geojson, {
-                        style: {
-                            color: '#000000',
-                            weight: 3,
-                            opacity: 0.8,
-                            className: animClass
-                        }
-                    });
-
-                    routeGroup.addLayer(casingLayer);
-                    routeGroup.addLayer(coreLayer);
-                    routeGroup.addLayer(flowLayer);
-
-                    currentRouteLayer = routeGroup.addTo(map);
-
-                    // Fit map view to route bounds
-                    const bounds = casingLayer.getBounds();
-                    if (bounds.isValid()) {
-                        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
-                    }
-                })
-                .catch(err => console.error('Error loading route shape:', err));
+            return cloned;
         }
+
+       // Load Route GeoJSON & Calculate Direction Flow Per Segment Vector
+function loadBusRouteOnMap(routeInput, directionRaw = 'Outbound') {
+    if (!routeInput) return;
+
+    const cleanRoute = String(routeInput).replace(/[^0-9]/g, '');
+    console.log(`[GeoJSON] Requesting route shape for Route ${cleanRoute} (${directionRaw})...`);
+
+    fetch(`/api/routes/${cleanRoute}/shape`)
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success || !data.geojson) {
+                console.warn(`No shape found for route: ${cleanRoute}`);
+                return;
+            }
+
+            if (currentRouteLayer) {
+                map.removeLayer(currentRouteLayer);
+            }
+
+            const dirString = String(directionRaw).toLowerCase().trim();
+            const isInbound = dirString.includes('inbound');
+
+            const routeGroup = L.layerGroup();
+
+            // 1. Solid Base Track (Black background line)
+            const baseLayer = L.geoJSON(data.geojson, {
+                style: {
+                    color: '#0f0f11',
+                    weight: 7,
+                    opacity: 0.9,
+                    lineCap: 'round',
+                    lineJoin: 'round'
+                }
+            });
+
+            // 2. White Core Line
+            const coreLayer = L.geoJSON(data.geojson, {
+                style: {
+                    color: '#ffffff',
+                    weight: 3,
+                    opacity: 0.95,
+                    lineCap: 'round',
+                    lineJoin: 'round'
+                }
+            });
+
+            // 3. Dynamic Animated Dash Overlay (Detects each feature's vector heading)
+            const flowLayer = L.geoJSON(data.geojson, {
+                style: function(feature) {
+                    let segmentIsSouthbound = false;
+
+                    // Extract coordinates to determine whether this specific feature runs Southbound
+                    if (feature.geometry && feature.geometry.coordinates) {
+                        const coords = feature.geometry.type === 'MultiLineString' 
+                            ? feature.geometry.coordinates[0] 
+                            : feature.geometry.coordinates;
+
+                        if (coords && coords.length >= 2) {
+                            const startLat = coords[0][1];
+                            const endLat = coords[coords.length - 1][1];
+                            // If starting latitude is higher than ending latitude, it flows Southbound (Panadura bound)
+                            segmentIsSouthbound = startLat > endLat;
+                        }
+                    }
+
+                    // For Route 100 / North-South corridors:
+                    // Outbound = Heading South (Pettah -> Panadura)
+                    // Inbound = Heading North (Panadura -> Pettah)
+                    let shouldAnimateForward = false;
+
+                    if (isInbound) {
+                        // Moving North: Use forward animation on Northbound segments, reverse on Southbound segments
+                        shouldAnimateForward = !segmentIsSouthbound;
+                    } else {
+                        // Moving South: Use forward animation on Southbound segments, reverse on Northbound segments
+                        shouldAnimateForward = segmentIsSouthbound;
+                    }
+
+                    return {
+                        color: '#000000',
+                        weight: 3,
+                        opacity: 1,
+                        className: shouldAnimateForward ? 'route-flow-forward' : 'route-flow-reverse',
+                        lineCap: 'round',
+                        lineJoin: 'round'
+                    };
+                }
+            });
+
+            routeGroup.addLayer(baseLayer);
+            routeGroup.addLayer(coreLayer);
+            routeGroup.addLayer(flowLayer);
+
+            currentRouteLayer = routeGroup.addTo(map);
+
+            const bounds = baseLayer.getBounds();
+            if (bounds.isValid()) {
+                map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
+            }
+        })
+        .catch(err => console.error('Error loading route shape:', err));
+}
 
         // Socket Event Listeners
         socket.on('connect', () => {
@@ -481,7 +541,7 @@
                 Array.from(destinations).map(d => `<option value="${d}">${d}</option>`).join('');
         }
 
-        // Event Handlers for Filters
+        // Event Handlers
         document.getElementById('routeQueryInput').addEventListener('input', renderBusesList);
         document.getElementById('originSelectFilter').addEventListener('change', renderBusesList);
         document.getElementById('destinationSelectFilter').addEventListener('change', renderBusesList);
@@ -495,17 +555,16 @@
             renderBusesList();
         });
 
-        // URL Query Parameter Handling
+        // Query Param Auto-Filter
         window.addEventListener('DOMContentLoaded', () => {
             const params = new URLSearchParams(window.location.search);
             const routeParam = params.get('route');
             const fromParam = params.get('from');
-            const toParam = params.get('to');
 
             if (routeParam) {
                 document.getElementById('routeQueryInput').value = routeParam;
-            } else if (fromParam || toParam) {
-                if (fromParam) document.getElementById('routeQueryInput').value = fromParam;
+            } else if (fromParam) {
+                document.getElementById('routeQueryInput').value = fromParam;
             }
         });
     </script>
