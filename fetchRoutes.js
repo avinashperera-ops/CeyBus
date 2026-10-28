@@ -1,86 +1,57 @@
+// fetchRoutes.js — downloads Sri Lankan bus route relations from OpenStreetMap (Overpass)
+// and saves the RAW response to sri_lanka_raw_routes.json, which seed_routes.js reads.
+//   npm run fetch-routes && npm run seed
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 
-// Overpass API Query for all bus routes in Sri Lanka (Bounding Box: [5.9, 79.5, 9.9, 81.9])
+// "out body; >; out skel qt;" returns the relations plus their member ways and nodes.
+// osmtogeojson needs those nodes to rebuild geometry (the old "out geom" output is a different
+// shape that seed_routes.js could not read, so routes.json was never actually used).
 const overpassQuery = `
 [out:json][timeout:180];
-(
-  relation["route"="bus"](5.9,79.5,9.9,81.9);
-);
-out geom;
+relation["route"="bus"](5.9,79.5,9.9,81.9);
+out body;
+>;
+out skel qt;
 `;
 
 const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
+const OUTPUT_PATH = path.join(__dirname, 'sri_lanka_raw_routes.json');
 
 async function fetchSriLankaBusRoutes() {
-  console.log('Fetching Sri Lankan bus routes from OpenStreetMap Overpass API...');
-  
-  try {
-    const response = await axios.post(
-      OVERPASS_URL, 
-      `data=${encodeURIComponent(overpassQuery)}`, 
-      {
-        headers: { 
-          'Content-Type': 'application/x-www-form-urlencoded',
-          // Custom User-Agent prevents the HTTP 406 Error
-          'User-Agent': 'BeepBusTracker/1.0 (Contact: admin@beep.local)'
-        },
-        timeout: 180000 // 3 minutes timeout for heavy route datasets
-      }
-    );
+    console.log('Fetching Sri Lankan bus routes from the OpenStreetMap Overpass API...');
 
-    const elements = response.data.elements;
-    console.log(`Retrieved ${elements.length} raw transport relations.`);
+    try {
+        const response = await axios.post(
+            OVERPASS_URL,
+            `data=${encodeURIComponent(overpassQuery)}`,
+            {
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'User-Agent': 'CeyBus/1.0 (student project)' // Overpass rejects requests without one (HTTP 406)
+                },
+                timeout: 180000
+            }
+        );
 
-    const routesMap = {};
-
-    elements.forEach(relation => {
-      const tags = relation.tags || {};
-      const ref = tags.ref || tags.route_ref; // e.g., "138", "100", "101"
-      const name = tags.name || (tags.from && tags.to ? `${tags.from} - ${tags.to}` : `Route ${ref}`);
-
-      if (!ref) return;
-
-      const pathCoordinates = [];
-      if (relation.members) {
-        relation.members.forEach(member => {
-          if (member.type === 'way' && member.geometry) {
-            member.geometry.forEach(point => {
-              pathCoordinates.push([point.lat, point.lon]);
-            });
-          }
-        });
-      }
-
-      if (pathCoordinates.length > 0) {
-        const routeKey = ref.trim().toUpperCase();
-
-        if (!routesMap[routeKey]) {
-          routesMap[routeKey] = {
-            routeNumber: routeKey,
-            routeName: name,
-            operator: tags.operator || 'SLTB / Private',
-            path: pathCoordinates
-          };
-        } else {
-          routesMap[routeKey].path = routesMap[routeKey].path.concat(pathCoordinates);
+        const elements = response.data && response.data.elements;
+        if (!Array.isArray(elements) || elements.length === 0) {
+            throw new Error('Overpass returned no elements.');
         }
-      }
-    });
 
-    const outputPath = path.join(__dirname, 'routes.json');
-    fs.writeFileSync(outputPath, JSON.stringify(routesMap, null, 2));
-    
-    console.log(`Success! Saved ${Object.keys(routesMap).length} unique Sri Lankan bus routes to routes.json`);
-
-  } catch (error) {
-    if (error.response) {
-      console.error(`Error fetching route data: Server responded with status ${error.response.status}`);
-    } else {
-      console.error('Error fetching route data:', error.message);
+        const relations = elements.filter((e) => e.type === 'relation').length;
+        fs.writeFileSync(OUTPUT_PATH, JSON.stringify(response.data));
+        console.log(`Saved ${elements.length} elements (${relations} bus relations) to sri_lanka_raw_routes.json`);
+        console.log('Now run: npm run seed');
+    } catch (error) {
+        if (error.response) {
+            console.error(`Error fetching route data: server responded with status ${error.response.status}`);
+        } else {
+            console.error('Error fetching route data:', error.message);
+        }
+        process.exitCode = 1;
     }
-  }
 }
 
 fetchSriLankaBusRoutes();

@@ -35,27 +35,22 @@
     <!-- Socket.IO Client -->
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        /* Dual-Direction Aware Dash Flow Animations */
 @keyframes dash-flow-forward {
     from { stroke-dashoffset: 24; }
     to { stroke-dashoffset: 0; }
 }
-
 @keyframes dash-flow-reverse {
     from { stroke-dashoffset: 0; }
     to { stroke-dashoffset: 24; }
 }
-
 .route-flow-forward {
     stroke-dasharray: 6, 12;
     animation: dash-flow-forward 0.8s linear infinite;
 }
-
 .route-flow-reverse {
     stroke-dasharray: 6, 12;
     animation: dash-flow-reverse 0.8s linear infinite;
 }
-
         body {
             font-family: 'Inter', sans-serif;
             background-color: #fcfcfc;
@@ -63,38 +58,30 @@
             -webkit-tap-highlight-color: transparent;
         }
         #map {
-            height: 100%;
+            position: absolute;
+            inset: 0;
             width: 100%;
+            height: 100%;
             z-index: 10;
         }
         .leaflet-container {
             font-family: 'Inter', sans-serif !important;
         }
-        /* Custom Bus Marker Pulse Animation */
         .bus-marker-pulse {
             border-radius: 50%;
             box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
             animation: pulse-green 2s infinite;
         }
         @keyframes pulse-green {
-            0% {
-                transform: scale(0.95);
-                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
-            }
-            70% {
-                transform: scale(1);
-                box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
-            }
-            100% {
-                transform: scale(0.95);
-                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
-            }
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
         }
     </style>
 </head>
 <body class="h-screen flex flex-col antialiased selection:bg-black selection:text-white overflow-hidden">
 
-    <!-- Top Navigation Header -->
+  <!-- Top Navigation Header -->
     <header class="w-full bg-white border-b border-neutral-200/80 px-4 sm:px-6 py-3.5 flex items-center justify-between shrink-0 z-30 shadow-sm">
         <a href="/" class="flex items-center gap-2.5 group">
             <div class="w-8 h-8 bg-black text-white font-black text-xs flex items-center justify-center rounded-lg shadow-sm group-hover:scale-105 transition-transform">
@@ -104,24 +91,25 @@
             <span class="hidden sm:inline-block ml-2 px-2.5 py-0.5 rounded-full bg-neutral-100 text-[10px] font-semibold text-neutral-600 uppercase tracking-wider">Passenger Radar</span>
         </a>
 
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-3">
             <span class="hidden md:flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-semibold">
                 <span id="socketDot" class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                 <span id="activeCountHeader">Connecting...</span>
             </span>
-            <a href="/login.html" class="px-4 py-2 text-xs font-semibold text-neutral-700 hover:text-black transition-colors rounded-full hover:bg-neutral-100">
-                Account
+
+            <!-- Account Page Redirect Link -->
+            <a href="/account.html" class="flex items-center gap-2 bg-neutral-100 border border-neutral-200 px-3 py-1.5 rounded-full hover:border-neutral-300 transition-all">
+                <img id="navUserAvatar" src="https://www.gravatar.com/avatar/?d=mp" alt="Avatar" class="w-6 h-6 rounded-full object-cover" referrerpolicy="no-referrer">
+                <span id="navUserName" class="text-xs font-bold text-neutral-900">Account</span>
             </a>
         </div>
     </header>
 
     <!-- Main Workspace Split Container -->
-    <div class="flex-1 flex flex-col md:flex-row relative overflow-hidden">
+    <div class="flex-1 flex flex-col md:flex-row relative overflow-hidden min-h-0">
         
         <!-- Left Sidebar: Route Search & Live Active Bus Feed -->
         <aside class="w-full md:w-96 bg-white border-r border-neutral-200/80 flex flex-col shrink-0 z-20 max-h-[45vh] md:max-h-full shadow-md md:shadow-none">
-            
-            <!-- Search & Filter Bar -->
             <div class="p-4 border-b border-neutral-100 bg-neutral-50/50">
                 <form id="searchFilterForm" class="space-y-2">
                     <div class="relative">
@@ -137,18 +125,15 @@
                     </div>
                 </form>
             </div>
-
-            <!-- Active Bus List Container -->
             <div class="flex-1 overflow-y-auto p-4 space-y-3" id="activeBusesList">
                 <div class="text-center py-8 text-neutral-400 text-xs font-medium">
                     Fetching live active fleet...
                 </div>
             </div>
-
         </aside>
 
         <!-- Right Side: Leaflet Interactive Map Workspace -->
-        <main class="flex-1 relative h-full w-full">
+        <main class="flex-1 relative h-full w-full min-h-0">
             <div id="map"></div>
 
             <!-- Selected Bus Live Floating Telemetry Overlay -->
@@ -183,14 +168,54 @@
 
     <!-- Client Script -->
     <script>
+        const token = localStorage.getItem('ceybus_passenger_token');
+        const passengerStr = localStorage.getItem('ceybus_passenger');
+        if (!token || !passengerStr) {
+            window.location.href = '/login.html';
+        }
+
+        let currentPassenger = JSON.parse(passengerStr || '{}');
+
+        // Populate Navbar with Passenger data & Profile Picture with fallback
+        function updatePassengerUI() {
+            let avatarUrl = currentPassenger.profilePicture;
+            if (!avatarUrl || avatarUrl.trim() === '' || avatarUrl.includes('undefined')) {
+                const nameEnc = encodeURIComponent(currentPassenger.name || 'User');
+                avatarUrl = `https://ui-avatars.com/api/?name=${nameEnc}&background=0f0f11&color=fff&bold=true`;
+            }
+            
+            const navAvatar = document.getElementById('navUserAvatar');
+            if (navAvatar) {
+                navAvatar.src = avatarUrl;
+                navAvatar.referrerPolicy = "no-referrer";
+            }
+            
+            document.getElementById('navUserName').innerText = currentPassenger.name || 'Account';
+        }
+        updatePassengerUI();
+
         const socket = io();
         let map;
         let busMarkers = new Map();
         let busesMap = new Map();
         let selectedPlateNumber = null;
         let currentRouteLayer = null;
+        let currentRouteKey = null;
+        const qs = new URLSearchParams(window.location.search);
+        let pendingHighlightRoute = qs.get('highlight') === 'true' ? qs.get('route') : null;
 
-        // Initialize Leaflet Map
+        function escapeHtml(v) {
+            return String(v ?? '').replace(/[&<>"']/g, c => (
+                { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+            ));
+        }
+
+        function clearRouteLayer() {
+            if (currentRouteLayer) map.removeLayer(currentRouteLayer);
+            currentRouteLayer = null;
+            currentRouteKey = null;
+        }
+
         function initMap() {
             map = L.map('map', { zoomControl: false }).setView([6.9271, 79.8612], 11);
             L.control.zoom({ position: 'topright' }).addTo(map);
@@ -199,144 +224,90 @@
                 maxZoom: 19,
                 attribution: '&copy; OpenStreetMap | CeyBus Transit'
             }).addTo(map);
+
+            // Force Leaflet to calculate sizing properly on load
+            setTimeout(() => {
+                map.invalidateSize();
+            }, 250);
         }
 
         initMap();
 
-        // Recursively reverse GeoJSON coordinate order for Inbound routes
-        function reverseGeoJSONCoordinates(geojson) {
-            const cloned = JSON.parse(JSON.stringify(geojson));
+        function loadBusRouteOnMap(routeInput, directionRaw = 'Outbound') {
+            if (!routeInput) return;
 
-            function reverseCoords(coords, type) {
-                if (type === 'LineString') {
-                    return coords.slice().reverse();
-                } else if (type === 'MultiLineString') {
-                    return coords.map(line => line.slice().reverse()).reverse();
-                }
-                return coords;
-            }
+            const cleanRoute = String(routeInput).replace(/^route\s*/i, '').trim();
+            const routeKey = `${cleanRoute}|${String(directionRaw).toLowerCase()}`;
+            if (routeKey === currentRouteKey) return;
+            currentRouteKey = routeKey;
 
-            if (cloned.type === 'FeatureCollection') {
-                cloned.features.forEach(f => {
-                    if (f.geometry) {
-                        f.geometry.coordinates = reverseCoords(f.geometry.coordinates, f.geometry.type);
+            fetch(`/api/routes/${encodeURIComponent(cleanRoute)}/shape`)
+                .then(res => res.json())
+                .then(data => {
+                    if (currentRouteKey !== routeKey) return;
+                    if (!data.success || !data.geojson) {
+                        currentRouteKey = null;
+                        return;
                     }
-                });
-            } else if (cloned.type === 'Feature') {
-                if (cloned.geometry) {
-                    cloned.geometry.coordinates = reverseCoords(cloned.geometry.coordinates, cloned.geometry.type);
-                }
-            } else if (cloned.coordinates) {
-                cloned.coordinates = reverseCoords(cloned.coordinates, cloned.type);
-            }
 
-            return cloned;
+                    if (currentRouteLayer) {
+                        map.removeLayer(currentRouteLayer);
+                        currentRouteLayer = null;
+                    }
+
+                    const dirString = String(directionRaw).toLowerCase().trim();
+                    const isInbound = dirString.includes('inbound');
+                    const routeGroup = L.layerGroup();
+
+                    const baseLayer = L.geoJSON(data.geojson, {
+                        style: { color: '#0f0f11', weight: 7, opacity: 0.9, lineCap: 'round', lineJoin: 'round' }
+                    });
+
+                    const coreLayer = L.geoJSON(data.geojson, {
+                        style: { color: '#ffffff', weight: 3, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }
+                    });
+
+                    const flowLayer = L.geoJSON(data.geojson, {
+                        style: function(feature) {
+                            let segmentIsSouthbound = false;
+                            if (feature.geometry && feature.geometry.coordinates) {
+                                const coords = feature.geometry.type === 'MultiLineString' 
+                                    ? feature.geometry.coordinates[0] 
+                                    : feature.geometry.coordinates;
+
+                                if (coords && coords.length >= 2) {
+                                    segmentIsSouthbound = coords[0][1] > coords[coords.length - 1][1];
+                                }
+                            }
+                            let shouldAnimateForward = isInbound ? !segmentIsSouthbound : segmentIsSouthbound;
+
+                            return {
+                                color: '#000000',
+                                weight: 3,
+                                opacity: 1,
+                                className: shouldAnimateForward ? 'route-flow-forward' : 'route-flow-reverse',
+                                lineCap: 'round',
+                                lineJoin: 'round'
+                            };
+                        }
+                    });
+
+                    routeGroup.addLayer(baseLayer);
+                    routeGroup.addLayer(coreLayer);
+                    routeGroup.addLayer(flowLayer);
+
+                    currentRouteLayer = routeGroup.addTo(map);
+
+                    const bounds = baseLayer.getBounds();
+                    if (bounds.isValid()) {
+                        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
+                    }
+                })
+                .catch(err => {
+                    if (currentRouteKey === routeKey) currentRouteKey = null;
+                });
         }
 
-       // Load Route GeoJSON & Calculate Direction Flow Per Segment Vector
-function loadBusRouteOnMap(routeInput, directionRaw = 'Outbound') {
-    if (!routeInput) return;
-
-    const cleanRoute = String(routeInput).replace(/[^0-9]/g, '');
-    console.log(`[GeoJSON] Requesting route shape for Route ${cleanRoute} (${directionRaw})...`);
-
-    fetch(`/api/routes/${cleanRoute}/shape`)
-        .then(res => res.json())
-        .then(data => {
-            if (!data.success || !data.geojson) {
-                console.warn(`No shape found for route: ${cleanRoute}`);
-                return;
-            }
-
-            if (currentRouteLayer) {
-                map.removeLayer(currentRouteLayer);
-            }
-
-            const dirString = String(directionRaw).toLowerCase().trim();
-            const isInbound = dirString.includes('inbound');
-
-            const routeGroup = L.layerGroup();
-
-            // 1. Solid Base Track (Black background line)
-            const baseLayer = L.geoJSON(data.geojson, {
-                style: {
-                    color: '#0f0f11',
-                    weight: 7,
-                    opacity: 0.9,
-                    lineCap: 'round',
-                    lineJoin: 'round'
-                }
-            });
-
-            // 2. White Core Line
-            const coreLayer = L.geoJSON(data.geojson, {
-                style: {
-                    color: '#ffffff',
-                    weight: 3,
-                    opacity: 0.95,
-                    lineCap: 'round',
-                    lineJoin: 'round'
-                }
-            });
-
-            // 3. Dynamic Animated Dash Overlay (Detects each feature's vector heading)
-            const flowLayer = L.geoJSON(data.geojson, {
-                style: function(feature) {
-                    let segmentIsSouthbound = false;
-
-                    // Extract coordinates to determine whether this specific feature runs Southbound
-                    if (feature.geometry && feature.geometry.coordinates) {
-                        const coords = feature.geometry.type === 'MultiLineString' 
-                            ? feature.geometry.coordinates[0] 
-                            : feature.geometry.coordinates;
-
-                        if (coords && coords.length >= 2) {
-                            const startLat = coords[0][1];
-                            const endLat = coords[coords.length - 1][1];
-                            // If starting latitude is higher than ending latitude, it flows Southbound (Panadura bound)
-                            segmentIsSouthbound = startLat > endLat;
-                        }
-                    }
-
-                    // For Route 100 / North-South corridors:
-                    // Outbound = Heading South (Pettah -> Panadura)
-                    // Inbound = Heading North (Panadura -> Pettah)
-                    let shouldAnimateForward = false;
-
-                    if (isInbound) {
-                        // Moving North: Use forward animation on Northbound segments, reverse on Southbound segments
-                        shouldAnimateForward = !segmentIsSouthbound;
-                    } else {
-                        // Moving South: Use forward animation on Southbound segments, reverse on Northbound segments
-                        shouldAnimateForward = segmentIsSouthbound;
-                    }
-
-                    return {
-                        color: '#000000',
-                        weight: 3,
-                        opacity: 1,
-                        className: shouldAnimateForward ? 'route-flow-forward' : 'route-flow-reverse',
-                        lineCap: 'round',
-                        lineJoin: 'round'
-                    };
-                }
-            });
-
-            routeGroup.addLayer(baseLayer);
-            routeGroup.addLayer(coreLayer);
-            routeGroup.addLayer(flowLayer);
-
-            currentRouteLayer = routeGroup.addTo(map);
-
-            const bounds = baseLayer.getBounds();
-            if (bounds.isValid()) {
-                map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
-            }
-        })
-        .catch(err => console.error('Error loading route shape:', err));
-}
-
-        // Socket Event Listeners
         socket.on('connect', () => {
             document.getElementById('socketDot').className = 'w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse';
             fetchActiveBuses();
@@ -375,9 +346,7 @@ function loadBusRouteOnMap(routeInput, directionRaw = 'Outbound') {
 
                 if (selectedPlateNumber === data.plateNumber) {
                     document.getElementById('busTelemetryOverlay').classList.add('hidden');
-                    if (currentRouteLayer) {
-                        map.removeLayer(currentRouteLayer);
-                    }
+                    clearRouteLayer();
                     selectedPlateNumber = null;
                 }
             }
@@ -398,9 +367,15 @@ function loadBusRouteOnMap(routeInput, directionRaw = 'Outbound') {
                     renderBusesList();
                     updateHeaderCounter();
                     populateFilterDropdowns();
+
+                    if (pendingHighlightRoute) {
+                        const match = Array.from(busesMap.values()).find(b => String(b.routeNumber) === pendingHighlightRoute);
+                        if (match) selectBus(match.plateNumber || match.id);
+                        else loadBusRouteOnMap(pendingHighlightRoute);
+                        pendingHighlightRoute = null;
+                    }
                 }
             } catch (err) {
-                console.warn('Error fetching active fleet:', err);
                 renderBusesList();
             }
         }
@@ -416,7 +391,7 @@ function loadBusRouteOnMap(routeInput, directionRaw = 'Outbound') {
                 className: 'custom-bus-icon',
                 html: `
                     <div class="w-8 h-8 bg-black text-white rounded-full flex items-center justify-center font-bold text-[10px] border-2 border-white shadow-lg bus-marker-pulse cursor-pointer">
-                        ${bus.routeNumber || 'CB'}
+                        ${escapeHtml(bus.routeNumber || 'CB')}
                     </div>
                 `,
                 iconSize: [32, 32],
@@ -482,13 +457,8 @@ function loadBusRouteOnMap(routeInput, directionRaw = 'Outbound') {
                 );
             }
 
-            if (selectedOrigin) {
-                buses = buses.filter(b => b.origin === selectedOrigin);
-            }
-
-            if (selectedDest) {
-                buses = buses.filter(b => b.destination === selectedDest);
-            }
+            if (selectedOrigin) buses = buses.filter(b => b.origin === selectedOrigin);
+            if (selectedDest) buses = buses.filter(b => b.destination === selectedDest);
 
             if (buses.length === 0) {
                 container.innerHTML = `
@@ -503,16 +473,16 @@ function loadBusRouteOnMap(routeInput, directionRaw = 'Outbound') {
                 const plate = b.plateNumber || b.id;
                 const isSelected = selectedPlateNumber === plate;
                 return `
-                    <div onclick="selectBus('${plate}')" class="p-3.5 rounded-xl border transition-all cursor-pointer ${isSelected ? 'bg-neutral-900 text-white border-black shadow-md' : 'bg-white text-neutral-900 border-neutral-200/80 hover:border-neutral-300'}">
+                    <div data-plate="${escapeHtml(plate)}" class="p-3.5 rounded-xl border transition-all cursor-pointer ${isSelected ? 'bg-neutral-900 text-white border-black shadow-md' : 'bg-white text-neutral-900 border-neutral-200/80 hover:border-neutral-300'}">
                         <div class="flex items-center justify-between mb-1.5">
                             <span class="px-2 py-0.5 rounded text-[10px] font-bold ${isSelected ? 'bg-white text-black' : 'bg-neutral-100 text-neutral-800'}">
-                                Route ${b.routeNumber || 'CB'}
+                                Route ${escapeHtml(b.routeNumber || 'CB')}
                             </span>
                             <span class="text-[10px] font-mono font-bold ${isSelected ? 'text-neutral-400' : 'text-neutral-500'}">
-                                ${plate}
+                                ${escapeHtml(plate)}
                             </span>
                         </div>
-                        <p class="text-xs font-bold truncate">${b.origin || 'Origin'} ⇄ ${b.destination || 'Destination'}</p>
+                        <p class="text-xs font-bold truncate">${escapeHtml(b.origin || 'Origin')} ⇄ ${escapeHtml(b.destination || 'Destination')}</p>
                         <div class="flex items-center justify-between text-[10px] mt-2 ${isSelected ? 'text-neutral-400' : 'text-neutral-500'} font-medium">
                             <span>Speed: ${b.speed ? Math.round(b.speed) : 0} km/h</span>
                             <span class="text-emerald-500 font-bold">● Live Telemetry</span>
@@ -525,7 +495,6 @@ function loadBusRouteOnMap(routeInput, directionRaw = 'Outbound') {
         function populateFilterDropdowns() {
             const origins = new Set();
             const destinations = new Set();
-
             busesMap.forEach(b => {
                 if (b.origin) origins.add(b.origin);
                 if (b.destination) destinations.add(b.destination);
@@ -535,13 +504,12 @@ function loadBusRouteOnMap(routeInput, directionRaw = 'Outbound') {
             const destSelect = document.getElementById('destinationSelectFilter');
 
             originSelect.innerHTML = '<option value="">All Origins</option>' + 
-                Array.from(origins).map(o => `<option value="${o}">${o}</option>`).join('');
+                Array.from(origins).map(o => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join('');
 
             destSelect.innerHTML = '<option value="">All Destinations</option>' + 
-                Array.from(destinations).map(d => `<option value="${d}">${d}</option>`).join('');
+                Array.from(destinations).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
         }
 
-        // Event Handlers
         document.getElementById('routeQueryInput').addEventListener('input', renderBusesList);
         document.getElementById('originSelectFilter').addEventListener('change', renderBusesList);
         document.getElementById('destinationSelectFilter').addEventListener('change', renderBusesList);
@@ -549,24 +517,22 @@ function loadBusRouteOnMap(routeInput, directionRaw = 'Outbound') {
         document.getElementById('closeOverlayBtn').addEventListener('click', () => {
             document.getElementById('busTelemetryOverlay').classList.add('hidden');
             selectedPlateNumber = null;
-            if (currentRouteLayer) {
-                map.removeLayer(currentRouteLayer);
-            }
+            clearRouteLayer();
             renderBusesList();
         });
 
-        // Query Param Auto-Filter
-        window.addEventListener('DOMContentLoaded', () => {
-            const params = new URLSearchParams(window.location.search);
-            const routeParam = params.get('route');
-            const fromParam = params.get('from');
-
-            if (routeParam) {
-                document.getElementById('routeQueryInput').value = routeParam;
-            } else if (fromParam) {
-                document.getElementById('routeQueryInput').value = fromParam;
-            }
+        document.getElementById('activeBusesList').addEventListener('click', (e) => {
+            const card = e.target.closest('[data-plate]');
+            if (card) selectBus(card.dataset.plate);
         });
+
+        (function applyQueryParams() {
+            const q = qs.get('route') || qs.get('from') || qs.get('to');
+            if (q) {
+                document.getElementById('routeQueryInput').value = q;
+                renderBusesList();
+            }
+        })();
     </script>
 </body>
 </html>

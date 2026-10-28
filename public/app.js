@@ -1,235 +1,136 @@
-// Initialize Leaflet Map (Centered on Colombo/Moratuwa region)
-const map = L.map('map').setView([6.9271, 79.8612], 12);
+// CeyBus landing-page live map.
+// Wrapped in an IIFE so its variables never collide with the inline script in index.html
+// (a top-level `const socket` in both files caused a SyntaxError that killed the page script).
+(function () {
+    'use strict';
 
-// Add OpenStreetMap tile layer
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '© OpenStreetMap contributors'
-}).addTo(map);
+    const mapEl = document.getElementById('map');
+    if (!mapEl || typeof L === 'undefined') return;
 
-// Socket.IO Connection
-const socket = io();
+    // ---- Map ---------------------------------------------------------------
+    const map = L.map('map', { scrollWheelZoom: false }).setView([6.9271, 79.8612], 11);
 
-// Store active bus markers and current route layer
-const activeBusMarkers = new Map();
-let currentRouteLayer = null;
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
 
-// Handle real-time active bus count updates
-socket.on('busCountUpdate', (data) => {
-    const countElement = document.getElementById('active-bus-count');
-    if (countElement) {
-        countElement.innerText = `Active Buses: ${data.count}`;
+    // Don't hijack page scrolling on the landing page: zoom with the wheel only after clicking the map.
+    map.on('click', () => map.scrollWheelZoom.enable());
+    map.on('mouseout', () => map.scrollWheelZoom.disable());
+
+    // ---- State -------------------------------------------------------------
+    const socket = window.ceybusSocket || io();
+    const activeBusMarkers = new Map();
+    let currentRouteLayer = null;
+    let currentRouteKey = null;
+
+    // ---- Helpers -----------------------------------------------------------
+    // Accept either {lat,lng} or {latitude,longitude}, and different route field names.
+    function getCoords(bus) {
+        const lat = bus.lat ?? bus.latitude;
+        const lng = bus.lng ?? bus.longitude;
+        return (typeof lat === 'number' && typeof lng === 'number') ? [lat, lng] : null;
     }
-});
 
-// Expose function globally
-window.loadBusRouteOnMap = function(routeInput) {
-    if (!routeInput) {
-        console.warn("loadBusRouteOnMap called with empty route input.");
-        return;
+    function getRoute(bus) {
+        return bus.routeNumber || bus.route_number || bus.route || '';
     }
 
-    const rawRoute = typeof routeInput === 'object' 
-        ? (routeInput.routeNumber || routeInput.route_number || routeInput.route) 
-        : routeInput;
-        
-    const cleanRoute = String(rawRoute).replace(/[^0-9]/g, '');
+    // Keep letters/digits/hyphens so "1-1" stays "1-1" (stripping to digits turned it into "11").
+    function normalizeRoute(input) {
+        const raw = (input && typeof input === 'object') ? getRoute(input) : input;
+        return String(raw || '').replace(/^route\s*/i, '').trim();
+    }
 
-    console.log(`Fetching route shape for Route ${cleanRoute}...`);
+    function escapeHtml(v) {
+        return String(v ?? '').replace(/[&<>"']/g, c => (
+            { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+        ));
+    }
 
-    fetch(`/api/routes/${cleanRoute}/shape`)
-        .then(res => res.json())
-        .then(data => {
-            console.log("Route Shape Data:", data);
-            if (!data.success) {
-                console.warn(`No route shape found for Route ${cleanRoute}`);
-                return;
-            }
+    function clearRoute() {
+        if (currentRouteLayer) map.removeLayer(currentRouteLayer);
+        currentRouteLayer = null;
+        currentRouteKey = null;
+    }
 
-            // Remove previous route line if present
-            if (window.currentRouteLayer) {
-                map.removeLayer(window.currentRouteLayer);
-            }
+    // ---- Route polyline ----------------------------------------------------
+    function loadBusRouteOnMap(routeInput) {
+        const route = normalizeRoute(routeInput);
+        if (!route) return;
+        if (route === currentRouteKey) return; // already drawn / loading: avoid refetch + re-zoom
 
-            // Draw polyline
-            window.currentRouteLayer = L.geoJSON(data.geojson, {
-                style: {
-                    color: '#2563eb',
-                    weight: 6,
-                    opacity: 0.85,
-                    lineCap: 'round',
-                    lineJoin: 'round'
+        clearRoute();
+        currentRouteKey = route;
+
+        fetch(`/api/routes/${encodeURIComponent(route)}/shape`)
+            .then(res => res.json())
+            .then(data => {
+                if (currentRouteKey !== route) return; // user picked another route meanwhile
+                if (!data.success || !data.geojson) {
+                    console.warn(`No route shape found for Route ${route}`, data.message || '');
+                    currentRouteKey = null;
+                    return;
                 }
-            }).addTo(map);
+                currentRouteLayer = L.geoJSON(data.geojson, {
+                    style: { color: '#2563eb', weight: 6, opacity: 0.85, lineCap: 'round', lineJoin: 'round' }
+                }).addTo(map);
 
-            // Zoom map to fit route
-            map.fitBounds(window.currentRouteLayer.getBounds(), { padding: [40, 40] });
-        })
-        .catch(err => console.error('Error fetching route shape:', err));
-};
+                const bounds = currentRouteLayer.getBounds();
+                if (bounds.isValid()) map.fitBounds(bounds, { padding: [40, 40] });
+            })
+            .catch(err => {
+                console.error('Error fetching route shape:', err);
+                if (currentRouteKey === route) currentRouteKey = null;
+            });
+    }
+    window.loadBusRouteOnMap = loadBusRouteOnMap;
 
-// Helper function to create marker and attach click handler
-function createBusMarker(plateNumber, lat, lng, routeNumber) {
-    const marker = L.marker([lat, lng])
-        .bindPopup(`<b>Bus ${plateNumber}</b><br>Route: ${routeNumber || 'N/A'}`)
-        .addTo(map);
+    // ---- Markers -----------------------------------------------------------
+    function upsertBusMarker(bus) {
+        const plate = bus.plateNumber;
+        const coords = getCoords(bus);
+        if (!plate || !coords) return;
 
-    // Fetch and display route shape when bus marker is clicked
-    marker.on('click', () => {
-        if (routeNumber) {
-            loadBusRouteOnMap(routeNumber);
+        const route = getRoute(bus);
+        const popup = `<b>Bus ${escapeHtml(plate)}</b><br>Route: ${escapeHtml(route || 'N/A')}`;
+
+        let marker = activeBusMarkers.get(plate);
+        if (marker) {
+            marker.setLatLng(coords);
+            marker.setPopupContent(popup);
+            marker._ceybusRoute = route;
+        } else {
+            marker = L.marker(coords).bindPopup(popup).addTo(map);
+            marker._ceybusRoute = route;
+            // Draw the route only for the bus the visitor clicks (auto-drawing on every ping
+            // made the line and zoom jump around as soon as two buses were online).
+            marker.on('click', () => loadBusRouteOnMap(marker._ceybusRoute));
+            activeBusMarkers.set(plate, marker);
+        }
+    }
+
+    // ---- Realtime ----------------------------------------------------------
+    socket.on('busLocationUpdated', upsertBusMarker);
+
+    socket.on('busOffline', (data) => {
+        const marker = data && activeBusMarkers.get(data.plateNumber);
+        if (marker) {
+            map.removeLayer(marker);
+            activeBusMarkers.delete(data.plateNumber);
         }
     });
 
-    return marker;
-}
-
-// Handle real-time location broadcast from driver
-socket.on('busLocationUpdated', (data) => {
-    const { plateNumber, lat, lng, routeNumber } = data;
-
-    if (activeBusMarkers.has(plateNumber)) {
-        // Move existing bus marker
-        const marker = activeBusMarkers.get(plateNumber);
-        marker.setLatLng([lat, lng]);
-    } else {
-        // Create new bus marker with route click listener
-        const marker = createBusMarker(plateNumber, lat, lng, routeNumber);
-        activeBusMarkers.set(plateNumber, marker);
-    }
-
-    // Automatically highlight route line when bus broadcasts
-    if (routeNumber) {
-        loadBusRouteOnMap(routeNumber);
-    }
-});
-
-// Handle bus going offline
-socket.on('busOffline', (data) => {
-    if (activeBusMarkers.has(data.plateNumber)) {
-        map.removeLayer(activeBusMarkers.get(data.plateNumber));
-        activeBusMarkers.delete(data.plateNumber);
-    }
-});
-
-// Helper to extract route string regardless of DB naming schema
-function extractRouteNumber(data) {
-    return data.routeNumber || data.route_number || data.route || '100';
-}
-
-// Handle real-time location broadcast from driver
-socket.on('busLocationUpdated', (data) => {
-    const route = extractRouteNumber(data);
-    const { plateNumber, lat, lng } = data;
-
-    if (activeBusMarkers.has(plateNumber)) {
-        const marker = activeBusMarkers.get(plateNumber);
-        marker.setLatLng([lat, lng]);
-    } else {
-        const marker = L.marker([lat, lng])
-            .bindPopup(`<b>Bus ${plateNumber}</b><br>Route: ${route}`)
-            .addTo(map);
-
-        marker.on('click', () => loadBusRouteOnMap(route));
-        activeBusMarkers.set(plateNumber, marker);
-    }
-
-    // Auto-draw route shape when telemetry updates
-    loadBusRouteOnMap(route);
-});
-
-// Load initial active buses when page loads
-fetch('/api/buses/active')
-    .then(res => res.json())
-    .then(buses => {
-        console.log("Initial Active Buses Data:", buses);
-        buses.forEach(bus => {
-            if (bus.lat && bus.lng) {
-                const route = extractRouteNumber(bus);
-                const marker = L.marker([bus.lat, bus.lng])
-                    .bindPopup(`<b>Bus ${bus.plateNumber}</b><br>Route: ${route}`)
-                    .addTo(map);
-
-                marker.on('click', () => loadBusRouteOnMap(route));
-                activeBusMarkers.set(bus.plateNumber, marker);
-
-                // Load route line immediately for active bus
-                loadBusRouteOnMap(route);
-            }
-        });
-    })
-    .catch(err => console.error('Error fetching active buses:', err));
-
-// Fetch and draw GeoJSON route polyline on Leaflet
-function loadBusRouteOnMap(routeInput) {
-    if (!routeInput) {
-        console.warn("loadBusRouteOnMap called with empty or undefined route identifier:", routeInput);
-        return;
-    }
-
-    // Handle objects or strings safely
-    const rawRoute = typeof routeInput === 'object' ? (routeInput.routeNumber || routeInput.route_number || routeInput.route) : routeInput;
-    const cleanRoute = String(rawRoute).replace(/[^0-9]/g, '');
-
-    console.log(`[GeoJSON Request] Fetching shape for clean route: "${cleanRoute}" (raw: "${rawRoute}")`);
-
-    fetch(`/api/routes/${cleanRoute}/shape`)
+    // ---- Initial state -----------------------------------------------------
+    fetch('/api/buses/active')
         .then(res => res.json())
-        .then(data => {
-            console.log("[GeoJSON Response]", data);
-            if (!data.success) {
-                console.warn(`No static route shape found for Route ${cleanRoute}:`, data.message);
-                return;
-            }
+        .then(buses => { if (Array.isArray(buses)) buses.forEach(upsertBusMarker); })
+        .catch(err => console.error('Error fetching active buses:', err));
 
-            // Remove existing route line from map if present
-            if (currentRouteLayer) {
-                map.removeLayer(currentRouteLayer);
-            }
-
-            // Render route polyline on map
-            currentRouteLayer = L.geoJSON(data.geojson, {
-                style: {
-                    color: '#2563eb', // Blue line
-                    weight: 6,
-                    opacity: 0.85,
-                    lineCap: 'round',
-                    lineJoin: 'round'
-                }
-            }).addTo(map);
-
-            // Zoom map to fit route path
-            map.fitBounds(currentRouteLayer.getBounds(), { padding: [40, 40] });
-            console.log("Route shape rendered successfully on map!");
-        })
-        .catch(err => console.error('Error fetching route shape:', err));
-}
-
-// Load initial active buses when page loads
-fetch('/api/buses/active')
-    .then(res => res.json())
-    .then(buses => {
-        buses.forEach(bus => {
-            if (bus.lat && bus.lng) {
-                const marker = createBusMarker(bus.plateNumber, bus.lat, bus.lng, bus.routeNumber);
-                activeBusMarkers.set(bus.plateNumber, marker);
-
-                // Highlight route shape for initial active bus automatically
-                if (bus.routeNumber) {
-                    loadBusRouteOnMap(bus.routeNumber);
-                }
-            }
-        });
-    })
-    .catch(err => console.error('Error fetching active buses:', err));
-
-// Attach click listener to sidebar bus cards (e.g. Route 100 card)
-document.addEventListener('DOMContentLoaded', () => {
+    // Optional: any element with data-route-number highlights that route on click.
     document.addEventListener('click', (e) => {
-        const card = e.target.closest('.bus-card') || e.target.closest('[data-route-number]');
-        if (card) {
-            const routeNumber = card.dataset.routeNumber || '100';
-            loadBusRouteOnMap(routeNumber);
-        }
+        const el = e.target.closest('[data-route-number]');
+        if (el) loadBusRouteOnMap(el.dataset.routeNumber);
     });
-});
+})();

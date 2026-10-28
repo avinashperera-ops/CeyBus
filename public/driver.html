@@ -93,8 +93,6 @@
                         <option value="">Select Route...</option>
                         <option value="138|Pettah|Maharagama">Route 138: Pettah ⇄ Maharagama</option>
                         <option value="100|Pettah|Panadura">Route 100: Pettah ⇄ Panadura</option>
-                        <option value="1-1|Colombo|Kandy">Route 1/1: Colombo ⇄ Kandy</option>
-                        <option value="2|Colombo|Galle">Route 2: Colombo ⇄ Galle</option>
                     </select>
                 </div>
                 <div>
@@ -171,17 +169,23 @@
 
     <!-- Driver Telemetry Logic Script -->
     <script>
-        const socket = io();
+        // Only a signed-in driver can broadcast (the server verifies this token)
+        const driverToken = localStorage.getItem('ceybus_driver_token');
+        if (!driverToken) {
+            window.location.replace('/login.html?role=driver');
+        }
+
+        const socket = io({ auth: { token: driverToken } });
 
         // State Variables
         let isBroadcasting = false;
         let watchPositionId = null;
         let driverData = {
             name: 'Driver',
-            plateNumber: 'ND-4821',
-            routeNumber: '138',
-            origin: 'Pettah',
-            destination: 'Maharagama'
+            plateNumber: '',
+            routeNumber: '',
+            origin: '',
+            destination: ''
         };
 
         // DOM Elements
@@ -211,6 +215,14 @@
             socketStatusBadge.className = 'inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-semibold';
         });
 
+        // The server refused our GPS updates (not approved, no bus assigned, bus already live...)
+        socket.on('broadcastRejected', (info) => {
+            if (isBroadcasting) {
+                stopBroadcasting();
+                alert((info && info.message) || 'Broadcast was rejected by the server.');
+            }
+        });
+
         socket.on('disconnect', () => {
             statusDot.className = 'w-1.5 h-1.5 rounded-full bg-rose-500';
             statusText.innerText = 'Disconnected';
@@ -220,21 +232,43 @@
 
         // Initialize Session User Info
         window.addEventListener('DOMContentLoaded', () => {
-            const savedDriver = localStorage.getItem('ceybus_driver_user');
+            const savedDriver = localStorage.getItem('ceybus_driver');
             if (savedDriver) {
                 try {
                     const parsed = JSON.parse(savedDriver);
                     driverData.name = parsed.fullName || parsed.name || 'Driver';
-                    driverData.plateNumber = parsed.plateNumber || 'ND-4821';
+                    driverData.plateNumber = parsed.plateNumber || '';
                 } catch (e) {
                     console.warn('Session parse error:', e);
                 }
             }
 
             displayDriverName.innerText = driverData.name;
-            displayVehiclePlate.innerText = `Vehicle: ${driverData.plateNumber}`;
-            displayRouteNo.innerText = driverData.routeNumber;
+            displayVehiclePlate.innerText = `Vehicle: ${driverData.plateNumber || 'Unassigned'}`;
+            displayRouteNo.innerText = driverData.routeNumber || '--';
+            loadRouteOptions();
         });
+
+        // Add every route that has a drawable shape (from the database) to the dropdown
+        async function loadRouteOptions() {
+            try {
+                const res = await fetch('/api/routes');
+                if (!res.ok) return;
+                const routes = await res.json();
+                const known = new Set(Array.from(routeSelect.options).map(o => o.value.split('|')[0]));
+                routes.forEach(r => {
+                    if (known.has(r.routeNumber)) return;
+                    const opt = document.createElement('option');
+                    opt.value = `${r.routeNumber}|${r.origin}|${r.destination}`;
+                    opt.textContent = r.origin && r.destination
+                        ? `Route ${r.routeNumber}: ${r.origin} ⇄ ${r.destination}`
+                        : `Route ${r.routeNumber}`;
+                    routeSelect.appendChild(opt);
+                });
+            } catch (err) {
+                console.warn('Could not load route list:', err);
+            }
+        }
 
         // Handle Route Change Selection
         routeSelect.addEventListener('change', (e) => {
@@ -251,6 +285,10 @@
         // Toggle Trip Broadcast Button Listener
         toggleTripBtn.addEventListener('click', () => {
             if (!isBroadcasting) {
+                if (!driverData.plateNumber) {
+                    alert('No bus is linked to your account. Sign out and sign in again with your bus plate number.');
+                    return;
+                }
                 if (!routeSelect.value) {
                     alert('Please select an assigned route before starting your live trip.');
                     return;
@@ -299,6 +337,8 @@
                         direction: directionSelect.value,
                         latitude: lat,
                         longitude: lng,
+                        lat: lat,
+                        lng: lng,
                         speed: speed,
                         timestamp: Date.now()
                     };
@@ -320,13 +360,16 @@
 
         // Stop Location Broadcast
         function stopBroadcasting() {
+            const wasBroadcasting = isBroadcasting;
             isBroadcasting = false;
             if (watchPositionId !== null) {
                 navigator.geolocation.clearWatch(watchPositionId);
                 watchPositionId = null;
             }
 
-            socket.emit('stopLocationBroadcast', { plateNumber: driverData.plateNumber });
+            if (wasBroadcasting) {
+                socket.emit('stopLocationBroadcast', { plateNumber: driverData.plateNumber });
+            }
 
             toggleTripBtn.className = 'w-full sm:w-auto px-10 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider rounded-2xl shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-3 mx-auto';
             btnText.innerText = 'Start Live Trip Broadcast';
@@ -363,13 +406,16 @@
             try {
                 const res = await fetch('/api/incidents', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${driverToken}` },
                     body: JSON.stringify(incidentPayload)
                 });
 
                 if (res.ok) {
                     alert('Safety incident broadcasted to Authority Dashboard successfully.');
                     document.getElementById('incidentDetails').value = '';
+                } else if (res.status === 401) {
+                    alert('Your session has expired. Please sign in again.');
+                    window.location.href = '/login.html?role=driver';
                 } else {
                     alert('Failed to transmit safety incident report.');
                 }
@@ -382,7 +428,9 @@
         // Logout Event
         document.getElementById('logoutBtn').addEventListener('click', () => {
             stopBroadcasting();
-            localStorage.removeItem('ceybus_driver_user');
+            localStorage.removeItem('ceybus_driver');
+            localStorage.removeItem('ceybus_driver_token');
+            localStorage.removeItem('ceybus_user_role');
             window.location.href = '/login.html';
         });
     </script>

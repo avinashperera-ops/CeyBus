@@ -86,7 +86,7 @@
 
                 <div>
                     <label class="block text-xs font-bold text-neutral-400 uppercase tracking-wider mb-1.5">Security Passkey / Authorization PIN</label>
-                    <input type="password" id="authPin" maxlength="6" placeholder="6-Digit Security PIN" class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs font-mono font-bold text-emerald-400 placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 tracking-widest text-center">
+                    <input type="password" id="authPin" maxlength="6" required inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code" placeholder="6-Digit Security PIN" class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs font-mono font-bold text-emerald-400 placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 tracking-widest text-center">
                 </div>
 
                 <!-- Submission Button -->
@@ -120,6 +120,8 @@
             const pin = document.getElementById('authPin').value;
 
             const payload = { officialId, password, pin };
+            const btn = e.submitter || document.querySelector('#authorityLoginForm button[type="submit"]');
+            btn.disabled = true;
 
             try {
                 const res = await fetch('/api/auth/authority', {
@@ -127,15 +129,22 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
+                const data = await res.json().catch(() => ({}));
+
+                if (!res.ok || !data.success) {
+                    alert(data.message || 'Authorization failed.');
+                    return;
+                }
 
                 localStorage.setItem('ceybus_user_role', 'authority');
-                localStorage.setItem('ceybus_authority_user', JSON.stringify({ officialId }));
+                localStorage.setItem('ceybus_authority_user', JSON.stringify(data.official));
+                localStorage.setItem('ceybus_authority_token', data.token);
                 window.location.href = '/authority.html';
             } catch (err) {
-                console.warn('Authority direct access bypass engage:', err);
-                localStorage.setItem('ceybus_user_role', 'authority');
-                localStorage.setItem('ceybus_authority_user', JSON.stringify({ officialId }));
-                window.location.href = '/authority.html';
+                console.error('Authority sign-in error:', err);
+                alert('Cannot reach the CeyBus server. Please try again.');
+            } finally {
+                btn.disabled = false;
             }
         });
     </script>

@@ -41,8 +41,6 @@
             color: #0f0f11;
         }
         #authorityMap {
-            height: 100%;
-            width: 100%;
             z-index: 10;
         }
         .bus-marker-pulse {
@@ -122,7 +120,7 @@
                     <span class="text-[10px] text-neutral-400 font-semibold">Real-Time Telemetry</span>
                 </div>
                 <div class="flex-1 mt-3 rounded-xl overflow-hidden relative">
-                    <div id="authorityMap"></div>
+                    <div id="authorityMap" class="absolute inset-0"></div>
                 </div>
             </div>
 
@@ -183,11 +181,45 @@
 
     <!-- Script Logic -->
     <script>
-        const socket = io();
+        // Only a signed-in authority session may view this console
+        const authToken = localStorage.getItem('ceybus_authority_token');
+        if (localStorage.getItem('ceybus_user_role') !== 'authority' || !authToken) {
+            window.location.replace('/authority-login.html');
+        }
+
+        // The token lets the server put this socket in the authority room (incident alerts)
+        const socket = io({ auth: { token: authToken } });
+
+        function signOut() {
+            localStorage.removeItem('ceybus_user_role');
+            localStorage.removeItem('ceybus_authority_user');
+            localStorage.removeItem('ceybus_authority_token');
+            window.location.href = '/authority-login.html';
+        }
+
+        // fetch() that sends the token and signs out when it is no longer valid
+        async function authFetch(url, options = {}) {
+            const res = await fetch(url, {
+                ...options,
+                headers: { ...(options.headers || {}), 'Authorization': `Bearer ${authToken}` }
+            });
+            if (res.status === 401) { signOut(); throw new Error('Session expired'); }
+            return res;
+        }
 
         let map;
         let busMarkers = new Map();
         let incidentsList = [];
+
+        function escapeHtml(v) {
+            return String(v ?? '').replace(/[&<>"']/g, c => (
+                { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+            ));
+        }
+
+        function isDriverApproved(d) {
+            return d.status === 'approved' || d.approved === true;
+        }
 
         // Initialize Map
         function initMap() {
@@ -264,7 +296,7 @@
                 className: 'custom-bus-icon',
                 html: `
                     <div class="w-7 h-7 bg-black text-white rounded-full flex items-center justify-center font-bold text-[9px] border-2 border-white shadow-md bus-marker-pulse">
-                        ${bus.routeNumber || 'CB'}
+                        ${escapeHtml(bus.routeNumber || 'CB')}
                     </div>
                 `,
                 iconSize: [28, 28],
@@ -289,7 +321,7 @@
         // Drivers List Management
         async function fetchDriversList() {
             try {
-                const res = await fetch('/api/authority/drivers');
+                const res = await authFetch('/api/authority/drivers');
                 if (res.ok) {
                     const drivers = await res.json();
                     renderDriversTable(drivers);
@@ -304,9 +336,10 @@
 
         function renderDriversTable(drivers) {
             const tbody = document.getElementById('driversTableBody');
+            drivers = Array.isArray(drivers) ? drivers : [];
             
             let total = drivers.length;
-            let pending = drivers.filter(d => d.status === 'pending' || !d.approved).length;
+            let pending = drivers.filter(d => !isDriverApproved(d)).length;
 
             document.getElementById('statTotalDrivers').innerText = total;
             document.getElementById('statPendingDrivers').innerText = pending;
@@ -323,21 +356,21 @@
             }
 
             tbody.innerHTML = drivers.map(d => {
-                const isApproved = d.status === 'approved' || d.approved;
+                const isApproved = isDriverApproved(d);
                 const statusBadge = isApproved 
                     ? `<span class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold">APPROVED</span>`
                     : `<span class="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-bold">PENDING</span>`;
 
                 return `
                     <tr class="hover:bg-neutral-50/50">
-                        <td class="py-3 px-2 font-bold">${d.fullName || d.name || 'N/A'}</td>
-                        <td class="py-3 px-2 font-mono font-bold text-neutral-600">${d.plateNumber || 'N/A'}</td>
-                        <td class="py-3 px-2 font-mono text-neutral-500">${d.nicNumber || d.licenseNo || 'N/A'}</td>
-                        <td class="py-3 px-2 text-neutral-600">${d.phone || 'N/A'}</td>
+                        <td class="py-3 px-2 font-bold">${escapeHtml(d.fullName || d.name || 'N/A')}</td>
+                        <td class="py-3 px-2 font-mono font-bold text-neutral-600">${escapeHtml(d.plateNumber || 'N/A')}</td>
+                        <td class="py-3 px-2 font-mono text-neutral-500">${escapeHtml(d.nicNumber || d.licenseNo || 'N/A')}</td>
+                        <td class="py-3 px-2 text-neutral-600">${escapeHtml(d.phone || 'N/A')}</td>
                         <td class="py-3 px-2">${statusBadge}</td>
                         <td class="py-3 px-2 text-right">
                             ${!isApproved ? `
-                                <button onclick="approveDriver('${d.id || d.plateNumber}')" class="px-2.5 py-1 bg-black hover:bg-neutral-800 text-white font-bold text-[10px] rounded-lg transition-colors">
+                                <button data-approve-id="${escapeHtml(d.id || d.plateNumber)}" class="px-2.5 py-1 bg-black hover:bg-neutral-800 text-white font-bold text-[10px] rounded-lg transition-colors">
                                     Approve
                                 </button>
                             ` : `
@@ -351,7 +384,7 @@
 
         async function approveDriver(driverId) {
             try {
-                const res = await fetch(`/api/authority/drivers/${driverId}/approve`, { method: 'POST' });
+                const res = await authFetch(`/api/authority/drivers/${encodeURIComponent(driverId)}/approve`, { method: 'POST' });
                 if (res.ok) {
                     alert('Driver approved successfully.');
                     fetchDriversList();
@@ -366,7 +399,7 @@
         // Safety Incidents Fetching & Rendering
         async function fetchIncidents() {
             try {
-                const res = await fetch('/api/incidents');
+                const res = await authFetch('/api/incidents');
                 if (res.ok) {
                     incidentsList = await res.json();
                     renderIncidents();
@@ -394,13 +427,13 @@
                 return `
                     <div class="p-3 bg-rose-50/60 border border-rose-200/80 rounded-xl text-xs">
                         <div class="flex items-center justify-between mb-1">
-                            <span class="font-bold text-rose-800">${i.type || 'Safety Alert'}</span>
+                            <span class="font-bold text-rose-800">${escapeHtml(i.type || 'Safety Alert')}</span>
                             <span class="text-[10px] font-mono text-rose-500 font-bold">${time}</span>
                         </div>
-                        <p class="text-neutral-700 font-medium mb-1.5">${i.details || 'No details provided.'}</p>
+                        <p class="text-neutral-700 font-medium mb-1.5">${escapeHtml(i.details || 'No details provided.')}</p>
                         <div class="flex justify-between text-[10px] font-mono font-bold text-neutral-500">
-                            <span>Vehicle: ${i.plateNumber || 'N/A'}</span>
-                            <span>Route: ${i.routeNumber || 'N/A'}</span>
+                            <span>Vehicle: ${escapeHtml(i.plateNumber || 'N/A')}</span>
+                            <span>Route: ${escapeHtml(i.routeNumber || 'N/A')}</span>
                         </div>
                     </div>
                 `;
@@ -408,14 +441,22 @@
         }
 
         document.getElementById('refreshDriversBtn').addEventListener('click', fetchDriversList);
-        document.getElementById('clearIncidentsBtn').addEventListener('click', () => {
-            incidentsList = [];
-            renderIncidents();
+        document.getElementById('clearIncidentsBtn').addEventListener('click', async () => {
+            try {
+                const res = await authFetch('/api/incidents/clear', { method: 'POST' });
+                if (!res.ok) { alert('Could not clear incidents.'); return; }
+                incidentsList = [];
+                renderIncidents();
+            } catch (err) {
+                console.error('Clear incidents error:', err);
+            }
         });
 
-        document.getElementById('adminLogoutBtn').addEventListener('click', () => {
-            window.location.href = '/authority-login.html';
+        document.getElementById('driversTableBody').addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-approve-id]');
+            if (btn) approveDriver(btn.dataset.approveId);
         });
+        document.getElementById('adminLogoutBtn').addEventListener('click', signOut);
     </script>
 </body>
 </html>

@@ -3,8 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>CeyBus — Sign In & Registration</title>
+    <title>CeyBus — Access Portal</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Identity Services SDK -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -41,7 +43,7 @@
                 <p id="authSubtitle" class="text-xs text-neutral-400 font-semibold mt-1">Select your account type to proceed</p>
             </div>
 
-            <!-- Role Selector -->
+            <!-- Passenger / Driver Role Selector -->
             <div class="grid grid-cols-2 gap-1.5 p-1 bg-neutral-950 border border-neutral-800 rounded-2xl mb-6">
                 <button type="button" id="rolePassengerBtn" class="py-2.5 text-xs font-bold rounded-xl bg-white text-black shadow-sm transition-all">
                     Passenger
@@ -54,8 +56,8 @@
             <form id="authForm" class="space-y-4">
                 
                 <div>
-                    <label id="identifierLabel" class="block text-xs font-bold text-neutral-400 uppercase tracking-wider mb-1.5">Mobile Number</label>
-                    <input type="text" id="userIdentifier" required placeholder="0760873304" class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs font-medium text-white placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-white">
+                    <label id="identifierLabel" class="block text-xs font-bold text-neutral-400 uppercase tracking-wider mb-1.5">Email / Mobile Number</label>
+                    <input type="text" id="userIdentifier" required placeholder="0771234567 or email@domain.com" class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs font-medium text-white placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-white">
                 </div>
 
                 <div>
@@ -63,22 +65,34 @@
                     <input type="password" id="userPassword" required placeholder="••••••••••••" class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs font-medium text-white placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-white">
                 </div>
 
-                <!-- Driver Registration Database Fields (Hidden during Sign-In, Visible on Registration Click) -->
+                <!-- Passenger registration fields -->
+                <div id="passengerFields" class="space-y-4 hidden border-t border-neutral-800 pt-4 mt-2">
+                    <div>
+                        <label class="block text-xs font-bold text-neutral-400 uppercase tracking-wider mb-1.5">Full Name</label>
+                        <input type="text" id="passengerName" placeholder="Nimal Silva" class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs font-medium text-white placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-white">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-neutral-400 uppercase tracking-wider mb-1.5">Mobile Number</label>
+                        <input type="tel" id="passengerPhone" placeholder="0771234567" class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs font-medium text-white placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-white">
+                    </div>
+                </div>
+
+                <!-- Driver registration fields -->
                 <div id="driverFields" class="space-y-4 hidden border-t border-neutral-800 pt-4 mt-2">
                     <div>
-                        <label class="block text-xs font-bold text-neutral-400 uppercase tracking-wider mb-1.5">Full Name (DRIVER.Name)</label>
+                        <label class="block text-xs font-bold text-neutral-400 uppercase tracking-wider mb-1.5">Full Name</label>
                         <input type="text" id="driverFullName" placeholder="K.A. Suneth Perera" class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs font-medium text-white placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-white">
                     </div>
-
                     <div>
-                        <label class="block text-xs font-bold text-neutral-400 uppercase tracking-wider mb-1.5">Driving License Number (DRIVER.License_No)</label>
+                        <label class="block text-xs font-bold text-neutral-400 uppercase tracking-wider mb-1.5">Driving License Number</label>
                         <input type="text" id="driverLicenseNo" placeholder="B1234567" class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs font-mono font-medium text-white placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-white">
                     </div>
+                </div>
 
-                    <div>
-                        <label class="block text-xs font-bold text-neutral-400 uppercase tracking-wider mb-1.5">Bus License Plate (BUS.Plate_No)</label>
-                        <input type="text" id="driverPlate" placeholder="ND-1230" class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs font-mono font-bold text-white placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-white">
-                    </div>
+                <!-- Driver Bus License Plate Field -->
+                <div id="plateField" class="hidden">
+                    <label class="block text-xs font-bold text-neutral-400 uppercase tracking-wider mb-1.5">Bus License Plate</label>
+                    <input type="text" id="driverPlate" placeholder="ND-1230" class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs font-mono font-bold text-white placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-white">
                 </div>
 
                 <button type="submit" id="submitAuthBtn" class="w-full py-3.5 bg-white hover:bg-neutral-200 text-black font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg transition-all mt-2">
@@ -86,6 +100,24 @@
                 </button>
             </form>
 
+            <!-- Google Sign-In Button Integration Section -->
+            <div id="googleAuthSection" class="mt-4 pt-4 border-t border-neutral-800 flex flex-col items-center">
+                <div id="g_id_onload"
+                     data-client_id="235819291313-oc6upca62edup55atai1t4kdtmn6cgtc.apps.googleusercontent.com"
+                     data-callback="handleGoogleSignIn"
+                     data-auto_prompt="false">
+                </div>
+                <div class="g_id_signin w-full flex justify-center"
+                     data-type="standard"
+                     data-shape="pill"
+                     data-theme="outline"
+                     data-text="sign_in_with"
+                     data-size="large"
+                     data-width="100%">
+                </div>
+            </div>
+
+            <!-- Sign-Up & Sign-In Toggle Link Container -->
             <div class="mt-6 text-center pt-4 border-t border-neutral-800">
                 <p id="authSwitchPrompt" class="text-xs text-neutral-400 font-medium">
                     Don't have a passenger account? 
@@ -105,149 +137,168 @@
         const rolePassengerBtn = document.getElementById('rolePassengerBtn');
         const roleDriverBtn = document.getElementById('roleDriverBtn');
         const driverFields = document.getElementById('driverFields');
+        const passengerFields = document.getElementById('passengerFields');
+        const plateField = document.getElementById('plateField');
         const submitAuthBtn = document.getElementById('submitAuthBtn');
         const authSwitchPrompt = document.getElementById('authSwitchPrompt');
         const userIdentifier = document.getElementById('userIdentifier');
         const identifierLabel = document.getElementById('identifierLabel');
-
-        const driverFullName = document.getElementById('driverFullName');
-        const driverLicenseNo = document.getElementById('driverLicenseNo');
-        const driverPlate = document.getElementById('driverPlate');
+        const googleAuthSection = document.getElementById('googleAuthSection');
+        const authForm = document.getElementById('authForm');
 
         let selectedRole = 'passenger';
         let isRegistrationMode = false;
 
-        rolePassengerBtn.addEventListener('click', () => {
-            selectedRole = 'passenger';
-            isRegistrationMode = false;
-            
-            rolePassengerBtn.className = 'py-2.5 text-xs font-bold rounded-xl bg-white text-black shadow-sm transition-all';
-            roleDriverBtn.className = 'py-2.5 text-xs font-bold rounded-xl text-neutral-500 hover:text-white transition-all';
-            
-            identifierLabel.innerText = 'Email / Mobile Number';
-            driverFields.classList.add('hidden');
-            setRequiredDriverFields(false);
-
-            submitAuthBtn.innerText = 'Sign In as Passenger';
-            updateFooterPrompt();
-        });
-
-        roleDriverBtn.addEventListener('click', () => {
+        // Read query parameters from URL (e.g. ?role=driver or ?tab=signup)
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('role') === 'driver') {
             selectedRole = 'driver';
-            isRegistrationMode = false;
-            
-            roleDriverBtn.className = 'py-2.5 text-xs font-bold rounded-xl bg-white text-black shadow-sm transition-all';
-            rolePassengerBtn.className = 'py-2.5 text-xs font-bold rounded-xl text-neutral-500 hover:text-white transition-all';
-            
-            identifierLabel.innerText = 'Phone Number (DRIVER.Phone_Number)';
-            driverFields.classList.add('hidden');
-            setRequiredDriverFields(false);
-
-            submitAuthBtn.innerText = 'Sign In as Driver';
-            updateFooterPrompt();
-        });
-
-        function setRequiredDriverFields(required) {
-            if (required) {
-                driverFullName.setAttribute('required', 'required');
-                driverLicenseNo.setAttribute('required', 'required');
-            } else {
-                driverFullName.removeAttribute('required');
-                driverLicenseNo.removeAttribute('required');
-            }
+        }
+        if (urlParams.get('tab') === 'signup' || urlParams.get('mode') === 'signup') {
+            isRegistrationMode = true;
         }
 
-        function updateFooterPrompt() {
-            if (selectedRole === 'passenger') {
-                authSwitchPrompt.innerHTML = isRegistrationMode 
-                    ? `Already registered? <a href="#" id="registerToggleLink" class="text-white font-bold hover:underline ml-1">Sign In as Passenger</a>`
-                    : `Don't have a passenger account? <a href="#" id="registerToggleLink" class="text-white font-bold hover:underline ml-1">Register New Account</a>`;
-            } else {
-                authSwitchPrompt.innerHTML = isRegistrationMode
-                    ? `Already registered? <a href="#" id="registerToggleLink" class="text-white font-bold hover:underline ml-1">Sign In as Driver</a>`
-                    : `Need vehicle approval? <a href="#" id="registerToggleLink" class="text-white font-bold hover:underline ml-1">Submit Driver Application</a>`;
-            }
-            attachRegisterHandler();
-        }
+        const ACTIVE_TAB = 'py-2.5 text-xs font-bold rounded-xl bg-white text-black shadow-sm transition-all';
+        const IDLE_TAB = 'py-2.5 text-xs font-bold rounded-xl text-neutral-500 hover:text-white transition-all';
 
-        function attachRegisterHandler() {
-            const link = document.getElementById('registerToggleLink');
-            if (link) {
-                link.addEventListener('click', (e) => {
+        function renderForm() {
+            const passenger = selectedRole === 'passenger';
+
+            rolePassengerBtn.className = passenger ? ACTIVE_TAB : IDLE_TAB;
+            roleDriverBtn.className = passenger ? IDLE_TAB : ACTIVE_TAB;
+
+            passengerFields.classList.toggle('hidden', !(passenger && isRegistrationMode));
+            driverFields.classList.toggle('hidden', passenger || !isRegistrationMode);
+            
+            // Show plate field for drivers
+            plateField.classList.toggle('hidden', passenger);
+
+            // Hide Google Sign-In for drivers (requires driver approval flow)
+            googleAuthSection.classList.toggle('hidden', !passenger);
+
+            if (passenger) {
+                identifierLabel.innerText = 'Email / Mobile Number';
+                userIdentifier.placeholder = '0771234567 or email@domain.com';
+            } else {
+                identifierLabel.innerText = 'Phone Number / License No';
+                userIdentifier.placeholder = '0771234567 or B1234567';
+            }
+
+            submitAuthBtn.innerText = passenger
+                ? (isRegistrationMode ? 'Create Passenger Account' : 'Sign In as Passenger')
+                : (isRegistrationMode ? 'Submit Driver Application' : 'Sign In as Driver');
+
+            document.getElementById('authTitle').innerText = isRegistrationMode ? 'Create Account' : 'Access CeyBus';
+            
+            authSwitchPrompt.innerHTML = passenger
+                ? (isRegistrationMode 
+                    ? 'Already have a passenger account? <a href="#" id="registerToggleLink" class="text-white font-bold hover:underline ml-1">Sign In</a>'
+                    : 'Don\'t have a passenger account? <a href="#" id="registerToggleLink" class="text-white font-bold hover:underline ml-1">Register New Account</a>')
+                : (isRegistrationMode
+                    ? 'Already applied/registered? <a href="#" id="registerToggleLink" class="text-white font-bold hover:underline ml-1">Sign In</a>'
+                    : 'Want to register as a driver? <a href="#" id="registerToggleLink" class="text-white font-bold hover:underline ml-1">Driver Registration</a>');
+            
+            // Re-bind click event listener to the toggle link
+            const toggleLink = document.getElementById('registerToggleLink');
+            if (toggleLink) {
+                toggleLink.addEventListener('click', (e) => {
                     e.preventDefault();
                     isRegistrationMode = !isRegistrationMode;
-
-                    if (selectedRole === 'passenger') {
-                        driverFields.classList.add('hidden');
-                        setRequiredDriverFields(false);
-                        submitAuthBtn.innerText = isRegistrationMode ? 'Create Passenger Account' : 'Sign In as Passenger';
-                        userIdentifier.focus();
-                    } else {
-                        if (isRegistrationMode) {
-                            driverFields.classList.remove('hidden');
-                            setRequiredDriverFields(true);
-                            submitAuthBtn.innerText = 'Submit Driver Application';
-                            driverFullName.focus();
-                        } else {
-                            driverFields.classList.add('hidden');
-                            setRequiredDriverFields(false);
-                            submitAuthBtn.innerText = 'Sign In as Driver';
-                            userIdentifier.focus();
-                        }
-                    }
-                    updateFooterPrompt();
+                    renderForm();
                 });
             }
         }
 
-        document.getElementById('authForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
+        rolePassengerBtn.addEventListener('click', () => { selectedRole = 'passenger'; isRegistrationMode = false; renderForm(); });
+        roleDriverBtn.addEventListener('click', () => { selectedRole = 'driver'; isRegistrationMode = false; renderForm(); });
 
+        // Form Submit Handler
+        authForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
             const identifier = userIdentifier.value.trim();
             const password = document.getElementById('userPassword').value;
 
-            if (selectedRole === 'passenger') {
-                localStorage.setItem('ceybus_user_role', 'passenger');
-                window.location.href = '/passenger.html';
-                return;
+            const endpoint = selectedRole === 'passenger' ? '/api/auth/passenger' : '/api/auth/driver';
+            let payload = { identifier, password, isRegistration: isRegistrationMode };
+
+            if (isRegistrationMode) {
+                if (selectedRole === 'passenger') {
+                    payload.name = document.getElementById('passengerName').value.trim();
+                    payload.phone = document.getElementById('passengerPhone').value.trim();
+                    payload.email = identifier;
+                } else {
+                    payload.fullName = document.getElementById('driverFullName').value.trim();
+                    payload.licenseNo = document.getElementById('driverLicenseNo').value.trim();
+                    payload.plateNumber = document.getElementById('driverPlate').value.trim();
+                }
+            } else {
+                if (selectedRole === 'driver') {
+                    payload.plateNumber = document.getElementById('driverPlate').value.trim();
+                }
             }
 
-            const fullName = driverFullName.value.trim();
-            const licenseNo = driverLicenseNo.value.trim();
-            const plateNumber = driverPlate.value.trim();
-
-            const payload = {
-                isRegistration: isRegistrationMode,
-                identifier,
-                password,
-                fullName,
-                licenseNo,
-                plateNumber
-            };
-
             try {
-                const res = await fetch('/api/auth/driver', {
+                const res = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
                 const data = await res.json();
 
-                if (data.success) {
-                    localStorage.setItem('ceybus_user_role', 'driver');
-                    localStorage.setItem('ceybus_driver', JSON.stringify(data.driver));
-                    window.location.href = '/driver.html';
-                } else {
+                if (!res.ok || !data.success) {
                     alert(data.message || 'Authentication failed.');
+                    return;
+                }
+
+                if (isRegistrationMode && selectedRole === 'driver') {
+                    alert(data.message);
+                    isRegistrationMode = false;
+                    renderForm();
+                    return;
+                }
+
+                localStorage.setItem('ceybus_user_role', selectedRole);
+                if (selectedRole === 'passenger') {
+                    localStorage.setItem('ceybus_passenger', JSON.stringify(data.passenger));
+                    localStorage.setItem('ceybus_passenger_token', data.token);
+                    window.location.href = '/passenger.html';
+                } else {
+                    localStorage.setItem('ceybus_driver', JSON.stringify(data.driver));
+                    localStorage.setItem('ceybus_driver_token', data.token);
+                    window.location.href = '/driver.html';
                 }
             } catch (err) {
-                localStorage.setItem('ceybus_user_role', 'driver');
-                localStorage.setItem('ceybus_driver', JSON.stringify({ fullName, licenseNo, plateNumber }));
-                window.location.href = '/driver.html';
+                console.error('Auth request error:', err);
+                alert('Could not connect to the authentication server.');
             }
         });
 
-        attachRegisterHandler();
+        // Google Sign-In Handler
+        async function handleGoogleSignIn(response) {
+            try {
+                const res = await fetch('/api/auth/google', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: response.credential })
+                });
+                const data = await res.json();
+
+                if (!res.ok || !data.success) {
+                    alert(data.message || 'Google authentication failed.');
+                    return;
+                }
+
+                localStorage.setItem('ceybus_user_role', 'passenger');
+                localStorage.setItem('ceybus_passenger', JSON.stringify(data.passenger));
+                localStorage.setItem('ceybus_passenger_token', data.token);
+                window.location.href = '/passenger.html';
+            } catch (err) {
+                console.error('Google Sign-In Error:', err);
+                alert('Cannot reach server during Google authentication.');
+            }
+        }
+
+        renderForm();
     </script>
 </body>
 </html>
