@@ -197,7 +197,7 @@ app.post('/api/auth/driver', authLimiter, async (req, res) => {
         const password = String(req.body.password ?? '');
         const plateNumber = normalizePlate(req.body.plateNumber);
 
-        if (!identifier || !password) return fail(res, 400, 'Phone number and password are required.');
+        if (!identifier || !password) return fail(res, 400, 'Identifier and password are required.');
         if (plateNumber && !PLATE_RE.test(plateNumber)) return fail(res, 400, 'Invalid bus plate number.');
 
         if (isRegistration) {
@@ -206,7 +206,7 @@ app.post('/api/auth/driver', authLimiter, async (req, res) => {
 
             if (!fullName || !licenseNo) return fail(res, 400, 'Full Name and Driving License Number are required.');
             if (!plateNumber) return fail(res, 400, 'Bus plate number is required.');
-            if (!/^[0-9+][0-9 -]{8,14}$/.test(identifier)) return fail(res, 400, 'Enter a valid phone number.');
+            if (!identifier) return fail(res, 400, 'Enter a valid identifier or email.');
             if (password.length < 8) return fail(res, 400, 'Password must be at least 8 characters.');
 
             const hash = await bcrypt.hash(password, 10);
@@ -447,7 +447,8 @@ app.get('/api/passenger/me', requireRole('passenger'), async (req, res) => {
 });
 
 // ---------- DRIVER & INCIDENT APIS ----------
-const INCIDENT_TYPES = new Set(['Breakdown', 'Accident', 'Delay', 'Emergency']);
+// Updated to include 'Drowsiness' as a valid incident type
+const INCIDENT_TYPES = new Set(['Breakdown', 'Accident', 'Delay', 'Emergency', 'Drowsiness']);
 
 function mapIncident(r) {
     let details = r.Description || '';

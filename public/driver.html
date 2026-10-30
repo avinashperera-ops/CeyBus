@@ -31,6 +31,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <!-- Socket.IO Client -->
     <script src="/socket.io/socket.io.js"></script>
+    <!-- MediaPipe Face Mesh & Camera Utils via CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -105,12 +108,20 @@
             </div>
         </div>
 
-        <!-- Live Telemetry Broadcast Controls -->
+        <!-- Live Telemetry & AI Drowsiness Monitor Box -->
         <div class="bg-white rounded-2xl border border-neutral-200/80 p-5 sm:p-6 shadow-sm text-center">
-            <h3 class="text-sm font-bold text-neutral-900 mb-1">GPS Telemetry Switch</h3>
+            <h3 class="text-sm font-bold text-neutral-900 mb-1">GPS Telemetry & AI Drowsiness Monitor</h3>
             <p class="text-xs text-neutral-500 max-w-md mx-auto mb-6">
-                Toggle the switch below to start broadcasting live location telemetry to passengers and dispatch control across Sri Lanka.
+                Toggle the switch below to start live broadcasting and activate the computer vision driver sleep monitor.
             </p>
+
+            <!-- Visible Camera Feed Preview Container -->
+            <div class="relative w-48 h-36 mx-auto mb-6 bg-black rounded-xl overflow-hidden border-2 border-neutral-800 shadow-inner flex items-center justify-center">
+                <video id="webcamVideo" class="w-full h-full object-cover transform -scale-x-100" autoplay playsinline muted></video>
+                <div id="aiStatusOverlay" class="absolute bottom-2 left-2 right-2 bg-neutral-900/80 text-neutral-300 text-[10px] font-mono px-2 py-1 rounded backdrop-blur-sm">
+                    AI: Standby
+                </div>
+            </div>
 
             <button id="toggleTripBtn" class="w-full sm:w-auto px-10 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider rounded-2xl shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-3 mx-auto">
                 <span id="btnPulseDot" class="w-2.5 h-2.5 rounded-full bg-white animate-ping"></span>
@@ -167,9 +178,8 @@
         © 2026 CeyBus Driver Console • Live Telemetry Stream
     </footer>
 
-    <!-- Driver Telemetry Logic Script -->
+    <!-- Driver Telemetry & Drowsiness Logic Script -->
     <script>
-        // Only a signed-in driver can broadcast (the server verifies this token)
         const driverToken = localStorage.getItem('ceybus_driver_token');
         if (!driverToken) {
             window.location.replace('/login.html?role=driver');
@@ -177,7 +187,6 @@
 
         const socket = io({ auth: { token: driverToken } });
 
-        // State Variables
         let isBroadcasting = false;
         let watchPositionId = null;
         let driverData = {
@@ -187,6 +196,14 @@
             origin: '',
             destination: ''
         };
+
+        // --- ROBUST SLEEP DETECTOR STATE ---
+        let closedEyesStartTime = null;
+        const SLEEP_DURATION_THRESHOLD_MS = 2500; // 2.5 seconds continuous closure
+        const EAR_THRESHOLD = 0.26; // Adjusted sensitivity threshold for reliable closed-eye detection
+        let isAlarmTriggered = false;
+        const videoElement = document.getElementById('webcamVideo');
+        const aiStatusOverlay = document.getElementById('aiStatusOverlay');
 
         // DOM Elements
         const socketStatusBadge = document.getElementById('socketStatusBadge');
@@ -208,14 +225,12 @@
         const currentLatDisplay = document.getElementById('currentLatDisplay');
         const currentLngDisplay = document.getElementById('currentLngDisplay');
 
-        // Socket Connection Handlers
         socket.on('connect', () => {
             statusDot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse';
             statusText.innerText = 'Connected';
             socketStatusBadge.className = 'inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-semibold';
         });
 
-        // The server refused our GPS updates (not approved, no bus assigned, bus already live...)
         socket.on('broadcastRejected', (info) => {
             if (isBroadcasting) {
                 stopBroadcasting();
@@ -230,7 +245,6 @@
             stopBroadcasting();
         });
 
-        // Initialize Session User Info
         window.addEventListener('DOMContentLoaded', () => {
             const savedDriver = localStorage.getItem('ceybus_driver');
             if (savedDriver) {
@@ -249,7 +263,6 @@
             loadRouteOptions();
         });
 
-        // Add every route that has a drawable shape (from the database) to the dropdown
         async function loadRouteOptions() {
             try {
                 const res = await fetch('/api/routes');
@@ -270,7 +283,6 @@
             }
         }
 
-        // Handle Route Change Selection
         routeSelect.addEventListener('change', (e) => {
             const val = e.target.value;
             if (val) {
@@ -282,7 +294,6 @@
             }
         });
 
-        // Toggle Trip Broadcast Button Listener
         toggleTripBtn.addEventListener('click', () => {
             if (!isBroadcasting) {
                 if (!driverData.plateNumber) {
@@ -299,7 +310,6 @@
             }
         });
 
-        // Start GPS Geolocation Tracking
         function startBroadcasting() {
             if (!('geolocation' in navigator)) {
                 alert('Geolocation is not supported by your device browser.');
@@ -317,12 +327,11 @@
             routeSelect.disabled = true;
             directionSelect.disabled = true;
 
-            // Watch Position API
             watchPositionId = navigator.geolocation.watchPosition(
                 (pos) => {
                     const lat = pos.coords.latitude;
                     const lng = pos.coords.longitude;
-                    const speed = pos.coords.speed ? pos.coords.speed * 3.6 : 0; // Convert m/s to km/h
+                    const speed = pos.coords.speed ? pos.coords.speed * 3.6 : 0;
 
                     currentLatDisplay.innerText = lat.toFixed(4);
                     currentLngDisplay.innerText = lng.toFixed(4);
@@ -358,7 +367,6 @@
             );
         }
 
-        // Stop Location Broadcast
         function stopBroadcasting() {
             const wasBroadcasting = isBroadcasting;
             isBroadcasting = false;
@@ -382,9 +390,112 @@
             directionSelect.disabled = false;
 
             currentSpeedDisplay.innerText = '0 km/h';
+            aiStatusOverlay.innerText = 'AI: Standby';
+            aiStatusOverlay.className = 'absolute bottom-2 left-2 right-2 bg-neutral-900/80 text-neutral-300 text-[10px] font-mono px-2 py-1 rounded backdrop-blur-sm';
         }
 
-        // Incident Form Submission
+        // --- MEDIA PIPE DROWSINESS MONITOR SETUP ---
+        function calculateEAR(eyePoints, landmarks) {
+            const dist = (p1, p2) => Math.hypot(landmarks[p1].x - landmarks[p2].x, landmarks[p1].y - landmarks[p2].y);
+            const v1 = dist(eyePoints[1], eyePoints[5]);
+            const v2 = dist(eyePoints[2], eyePoints[4]);
+            const h = dist(eyePoints[0], eyePoints[3]);
+            return (v1 + v2) / (2.0 * h);
+        }
+
+        function onResults(results) {
+            if (!isBroadcasting) return;
+
+            if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) {
+                closedEyesStartTime = null;
+                aiStatusOverlay.innerText = 'AI: Searching Face...';
+                aiStatusOverlay.className = 'absolute bottom-2 left-2 right-2 bg-amber-950/80 text-amber-300 text-[10px] font-mono px-2 py-1 rounded backdrop-blur-sm';
+                return;
+            }
+
+            const landmarks = results.multiFaceLandmarks[0];
+            const leftEAR = calculateEAR([33, 160, 158, 133, 153, 144], landmarks);
+            const rightEAR = calculateEAR([362, 385, 387, 263, 373, 380], landmarks);
+            const avgEAR = (leftEAR + rightEAR) / 2.0;
+
+            const now = Date.now();
+
+            // Check continuous eye closure (primary micro-sleep trigger)
+            if (avgEAR < EAR_THRESHOLD) {
+                if (!closedEyesStartTime) {
+                    closedEyesStartTime = now;
+                } else {
+                    const elapsed = now - closedEyesStartTime;
+                    const remaining = Math.max(0, ((SLEEP_DURATION_THRESHOLD_MS - elapsed) / 1000).toFixed(1));
+                    aiStatusOverlay.innerText = `⚠️ SLEEP DETECTED (${remaining}s)`;
+                    aiStatusOverlay.className = 'absolute bottom-2 left-2 right-2 bg-red-900/90 text-red-100 text-[10px] font-mono font-bold px-2 py-1 rounded backdrop-blur-sm animate-pulse';
+
+                    if (elapsed >= SLEEP_DURATION_THRESHOLD_MS) {
+                        if (!isAlarmTriggered) {
+                            isAlarmTriggered = true;
+                            triggerMicroSleepEmergency();
+                        }
+                    }
+                }
+            } else {
+                closedEyesStartTime = null;
+                isAlarmTriggered = false;
+                aiStatusOverlay.innerText = 'AI: Tracking Active (Awake)';
+                aiStatusOverlay.className = 'absolute bottom-2 left-2 right-2 bg-emerald-950/80 text-emerald-300 text-[10px] font-mono px-2 py-1 rounded backdrop-blur-sm';
+            }
+        }
+
+        const faceMesh = new FaceMesh({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+        });
+
+        faceMesh.setOptions({
+            maxNumFaces: 1,
+            refineLandmarks: true,
+            minDetectionConfidence: 0.6,
+            minTrackingConfidence: 0.6
+        });
+
+        faceMesh.onResults(onResults);
+
+        const camera = new Camera(videoElement, {
+            onFrame: async () => {
+                if (isBroadcasting) {
+                    await faceMesh.send({ image: videoElement });
+                }
+            },
+            width: 320,
+            height: 240
+        });
+        camera.start();
+
+        async function triggerMicroSleepEmergency() {
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance("CRITICAL ALERT! Wake up! Pull over immediately!");
+                utterance.rate = 1.1;
+                utterance.pitch = 1.0;
+                window.speechSynthesis.speak(utterance);
+            }
+
+            const incidentPayload = {
+                plateNumber: driverData.plateNumber || 'ND-1234',
+                routeNumber: driverData.routeNumber || '138',
+                type: 'Drowsiness',
+                details: `CRITICAL ALERT: Driver ${driverData.name} (${driverData.plateNumber}) has fallen asleep (Micro-sleep verified via sustained eye closure).`,
+                timestamp: new Date().toISOString()
+            };
+
+            try {
+                await fetch('/api/incidents', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${driverToken}` },
+                    body: JSON.stringify(incidentPayload)
+                });
+            } catch (err) {
+                console.error('Failed to transmit drowsiness emergency report:', err);
+            }
+        }
+
         document.getElementById('incidentForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const type = document.getElementById('incidentType').value;
@@ -425,7 +536,6 @@
             }
         });
 
-        // Logout Event
         document.getElementById('logoutBtn').addEventListener('click', () => {
             stopBroadcasting();
             localStorage.removeItem('ceybus_driver');
